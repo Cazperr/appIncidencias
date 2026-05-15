@@ -1,7 +1,7 @@
 """
 Capa de base de datos.
 - Desarrollo local  → SQLite estándar (sqlite:///./incidencias.db)
-- Producción Turso  → libsql (libsql://xxx.turso.io) + TURSO_AUTH_TOKEN
+- Producción Turso  → libsql_client (libsql://xxx.turso.io) + TURSO_AUTH_TOKEN
 """
 import sqlite3
 from app.core.config import get_settings
@@ -9,9 +9,9 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
-# ── Wrapper para libsql (no tiene row_factory) ────────────────────────────────
+# ── Wrapper para libsql_client ────────────────────────────────────────────────
 
-class LibSQLRow(dict):
+class TursoRow(dict):
     """Imita sqlite3.Row: acceso por nombre y por índice."""
     def __getitem__(self, key):
         if isinstance(key, int):
@@ -19,49 +19,44 @@ class LibSQLRow(dict):
         return super().__getitem__(key)
 
 
-class LibSQLCursor:
-    def __init__(self, cur):
-        self._cur = cur
-        self.description = cur.description
-        self.lastrowid = getattr(cur, 'lastrowid', None)
+class TursoCursor:
+    def __init__(self, result_set):
+        self._rs = result_set
+        self.lastrowid = result_set.last_insert_rowid
 
-    def _cols(self):
-        return [d[0] for d in self._cur.description]
-
-    def _to_row(self, raw):
-        if raw is None:
-            return None
-        return LibSQLRow(zip(self._cols(), raw))
+    def _to_row(self, row):
+        return TursoRow(row.asdict())
 
     def fetchone(self):
-        return self._to_row(self._cur.fetchone())
+        rows = self._rs.rows
+        return self._to_row(rows[0]) if rows else None
 
     def fetchall(self):
-        return [LibSQLRow(zip(self._cols(), r)) for r in self._cur.fetchall()]
+        return [self._to_row(r) for r in self._rs.rows]
 
     def __iter__(self):
         return iter(self.fetchall())
 
 
-class LibSQLConnection:
-    def __init__(self, conn):
-        self._conn = conn
+class TursoConnection:
+    def __init__(self, client):
+        self._client = client
 
     def execute(self, sql, params=()):
-        return LibSQLCursor(self._conn.execute(sql, params))
+        args = list(params) if params else None
+        result = self._client.execute(sql, args)
+        return TursoCursor(result)
 
     def executescript(self, sql):
-        return self._conn.executescript(sql)
+        statements = [s.strip() for s in sql.split(";") if s.strip()]
+        if statements:
+            self._client.batch(statements)
 
     def commit(self):
-        self._conn.commit()
+        pass  # libsql_client auto-commit en cada execute()
 
     def close(self):
-        self._conn.close()
-
-    def sync(self):
-        if hasattr(self._conn, 'sync'):
-            self._conn.sync()
+        self._client.close()
 
 
 # ── Conexión ──────────────────────────────────────────────────────────────────
@@ -70,22 +65,17 @@ def get_connection():
     url = settings.DATABASE_URL
 
     if url.startswith("libsql://") or url.startswith("https://"):
-        # Turso cloud
-        import libsql
-        raw = libsql.connect(
-            ":memory:",
-            sync_url=url,
+        import libsql_client
+        client = libsql_client.create_client_sync(
+            url=url,
             auth_token=settings.TURSO_AUTH_TOKEN,
         )
-        raw.sync()
-        conn = LibSQLConnection(raw)
+        conn = TursoConnection(client)
     else:
-        # SQLite local
         path = url.replace("sqlite:///", "")
-        raw = sqlite3.connect(path)
-        raw.row_factory = sqlite3.Row
-        raw.execute("PRAGMA journal_mode=WAL")
-        conn = raw  # sqlite3 nativo ya tiene row_factory
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
 
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -94,7 +84,6 @@ def get_connection():
 # ── Schema completo ───────────────────────────────────────────────────────────
 
 _SCHEMA = """
--- ── Tabla original: incidencias ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS incidencias (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     estado_actual    TEXT NOT NULL DEFAULT 'PENDIENTE NOVA',
@@ -120,7 +109,6 @@ CREATE TABLE IF NOT EXISTS incidencias (
     updated_at       TEXT DEFAULT (datetime('now','localtime'))
 );
 
--- ── Tabla original: escalados ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS escalados (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     incidencia_id    INTEGER NOT NULL REFERENCES incidencias(id) ON DELETE CASCADE,
@@ -140,7 +128,6 @@ CREATE TABLE IF NOT EXISTS escalados (
     created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
--- ── Tabla original: historial_cambios ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS historial_cambios (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     incidencia_id INTEGER NOT NULL REFERENCES incidencias(id) ON DELETE CASCADE,
@@ -151,7 +138,6 @@ CREATE TABLE IF NOT EXISTS historial_cambios (
     fecha         TEXT DEFAULT (datetime('now','localtime'))
 );
 
--- ── NUEVA: usuarios ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS usuarios (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre        TEXT NOT NULL,
@@ -163,7 +149,6 @@ CREATE TABLE IF NOT EXISTS usuarios (
     created_at    TEXT DEFAULT (datetime('now','localtime'))
 );
 
--- ── NUEVA: incidencia_eventos (Event Sourcing) ────────────────────────────────
 CREATE TABLE IF NOT EXISTS incidencia_eventos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     incidencia_id INTEGER NOT NULL REFERENCES incidencias(id) ON DELETE CASCADE,
@@ -175,7 +160,7 @@ CREATE TABLE IF NOT EXISTS incidencia_eventos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_eventos_incidencia ON incidencia_eventos(incidencia_id);
-CREATE INDEX IF NOT EXISTS idx_eventos_tipo ON incidencia_eventos(tipo_evento);
+CREATE INDEX IF NOT EXISTS idx_eventos_tipo ON incidencia_eventos(tipo_evento)
 """
 
 
@@ -194,7 +179,7 @@ def _migrate(conn):
     for col, defn in [
         ("duplicada",    "INTEGER DEFAULT 0"),
         ("duplicada_de", "INTEGER REFERENCES incidencias(id) ON DELETE SET NULL"),
-        ("updated_at",   "TEXT"),  # SQLite no admite datetime() como default en ALTER TABLE
+        ("updated_at",   "TEXT"),
     ]:
         if col not in existing_inc:
             conn.execute(f"ALTER TABLE incidencias ADD COLUMN {col} {defn}")
