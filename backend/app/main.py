@@ -14,14 +14,6 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# ── Forzar HTTPS en Railway (evita 307 http redirect) ────────────────────────
-@app.middleware("http")
-async def force_https(request: Request, call_next):
-    if request.headers.get("x-forwarded-proto") == "http":
-        url = str(request.url).replace("http://", "https://", 1)
-        return RedirectResponse(url=url, status_code=301)
-    return await call_next(request)
-
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
