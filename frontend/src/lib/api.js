@@ -1,27 +1,19 @@
-const BASE = 'http://localhost:8000'
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// Carga el token inmediatamente al importar el modulo
 let _token = localStorage.getItem('metro_token') || null
 
-export function setToken(t) { 
-  _token = t 
+export function setToken(t) {
+  _token = t
   if (t) localStorage.setItem('metro_token', t)
 }
-export function clearToken() { 
-  _token = null 
+export function clearToken() {
+  _token = null
   localStorage.removeItem('metro_token')
   localStorage.removeItem('metro_user')
 }
 export function getToken() { return _token }
 
 async function apiFetch(path, opts = {}) {
-  // Railway requiere trailing slash antes de query params
-  if (path.includes('?')) {
-    const [base, query] = path.split('?')
-    if (!base.endsWith('/')) path = base + '/?' + query
-  } else if (!path.endsWith('/')) {
-    path = path + '/'
-  }
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
   if (_token) headers['Authorization'] = `Bearer ${_token}`
 
@@ -29,7 +21,6 @@ async function apiFetch(path, opts = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Error de red' }))
-    // 401 en /api/auth/login = credenciales incorrectas, no redirigir
     if (res.status === 401 && !path.includes('/auth/login')) {
       clearToken()
       window.location.href = '/login'
