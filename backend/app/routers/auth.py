@@ -13,8 +13,7 @@ from app.models.schemas import LoginRequest, TokenResponse, UsuarioOut
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/login")
-async def login(body: LoginRequest):
+async def _login_impl(body: LoginRequest):
     conn = get_connection()
     user = conn.execute(
         "SELECT * FROM usuarios WHERE email=? AND activo=1", (body.email,)
@@ -46,12 +45,28 @@ async def login(body: LoginRequest):
         }
     }
 
+@router.post("/login")
+async def login(body: LoginRequest):
+    return await _login_impl(body)
+
+@router.post("/login/")
+async def login_with_slash(body: LoginRequest):
+    return await _login_impl(body)
+
 
 @router.post("/logout")
 async def logout():
     return {"detail": "Sesion cerrada"}
 
+@router.post("/logout/")
+async def logout_with_slash():
+    return {"detail": "Sesion cerrada"}
+
 
 @router.get("/me")
 async def me(user: Annotated[dict, Depends(get_current_active_user)]):
+    return user
+
+@router.get("/me/")
+async def me_with_slash(user: Annotated[dict, Depends(get_current_active_user)]):
     return user
