@@ -15,26 +15,15 @@ export function getToken() { return _token }
 
 async function apiFetch(path, opts = {}) {
   if (!path.startsWith('/')) path = '/' + path
-  
-  // Login NO lleva slash (FastAPI lo maneja sin barra)
-  // Incidencias y otros endpoints SÍ llevan slash
-  const needsSlash = !path.includes('/auth/login') && !path.includes('/auth/refresh')
-  
-  let finalPath = path
-  if (needsSlash) {
-    const [basePath, ...rest] = path.split('?')
-    const cleanPath = basePath.endsWith('/') ? basePath : basePath + '/'
-    finalPath = rest.length > 0 ? cleanPath + '?' + rest.join('?') : cleanPath
-  }
-  
+
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
   if (_token) headers['Authorization'] = `Bearer ${_token}`
 
-  const res = await fetch(`${BASE}${finalPath}`, { ...opts, headers })
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Error de red' }))
-    if (res.status === 401 && !finalPath.includes('/auth/login')) {
+    if (res.status === 401 && !path.includes('/auth/login')) {
       clearToken()
       window.location.href = '/login'
       return

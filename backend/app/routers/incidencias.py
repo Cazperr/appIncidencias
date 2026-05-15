@@ -19,6 +19,7 @@ TecnicoOrAdmin = Depends(require_rol("ADMIN", "TECNICO"))
 
 
 # ── GET /api/incidencias ──────────────────────────────────────────────────────
+@router.get("")
 @router.get("/")
 async def list_incidencias(
     estado: Optional[str] = None,
@@ -81,6 +82,7 @@ async def get_incidencia(inc_id: int, _: dict = CurrentUser):
 
 
 # ── POST /api/incidencias ─────────────────────────────────────────────────────
+@router.post("", status_code=201)
 @router.post("/", status_code=201)
 async def create_incidencia(
     body: IncidenciaCreate,
