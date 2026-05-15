@@ -14,13 +14,18 @@ export function clearToken() {
 export function getToken() { return _token }
 
 async function apiFetch(path, opts = {}) {
-  // Asegurar trailing slash en todas las rutas (FastAPI lo requiere)
   if (!path.startsWith('/')) path = '/' + path
   
-  // Separar query string para añadir slash antes de él
-  const [basePath, ...rest] = path.split('?')
-  const cleanPath = basePath.endsWith('/') ? basePath : basePath + '/'
-  const finalPath = rest.length > 0 ? cleanPath + '?' + rest.join('?') : cleanPath
+  // Login NO lleva slash (FastAPI lo maneja sin barra)
+  // Incidencias y otros endpoints SÍ llevan slash
+  const needsSlash = !path.includes('/auth/login') && !path.includes('/auth/refresh')
+  
+  let finalPath = path
+  if (needsSlash) {
+    const [basePath, ...rest] = path.split('?')
+    const cleanPath = basePath.endsWith('/') ? basePath : basePath + '/'
+    finalPath = rest.length > 0 ? cleanPath + '?' + rest.join('?') : cleanPath
+  }
   
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
   if (_token) headers['Authorization'] = `Bearer ${_token}`
