@@ -1,4 +1,4 @@
-const BASE = 'http://localhost:8000'
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // Carga el token inmediatamente al importar el modulo
 let _token = localStorage.getItem('metro_token') || null
