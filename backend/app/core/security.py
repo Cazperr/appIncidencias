@@ -108,6 +108,23 @@ def _get_user_from_token(token: str) -> dict:
 # AUTH DEPENDENCIES (FIX PRINCIPAL)
 # -------------------------
 async def get_current_user(
+    token: Annotated[str | None, Depends(oauth2_scheme)] = None,
+):
+    print("TOKEN RAW:", token)
+
+    if not token:
+        raise HTTPException(status_code=401, detail="No token recibido")
+
+    try:
+        payload = decode_token(token)
+        print("PAYLOAD OK:", payload)
+        return _get_user_from_token(token)
+
+    except Exception as e:
+        print("ERROR JWT:", str(e))
+        raise
+    
+async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)]
 ) -> dict:
     return _get_user_from_token(token)
