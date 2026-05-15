@@ -12,7 +12,6 @@ app = FastAPI(
     title="Gestión de Incidencias — Metro Madrid",
     description="API REST para la gestión de incidencias técnicas con Event Sourcing",
     version="2.0.0",
-    redirect_slashes=False,
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
