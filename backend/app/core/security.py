@@ -3,8 +3,7 @@ from typing import Annotated
 import hashlib
 import bcrypt
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Header
 from jose import JWTError, jwt
 
 from app.core.config import get_settings
@@ -12,12 +11,9 @@ from app.db.database import get_connection
 
 settings = get_settings()
 
-# FIX: quitar auto_error=False
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
 
 # -------------------------
-# Password utils
+# PASSWORDS
 # -------------------------
 def _prep(password: str) -> bytes:
     return hashlib.sha256(password.encode()).hexdigest().encode()
@@ -75,16 +71,13 @@ def decode_token(token: str) -> dict:
 
 
 # -------------------------
-# User from token
+# USER RESOLUTION (FIX REAL)
 # -------------------------
 def _get_user_from_token(token: str) -> dict:
     payload = decode_token(token)
 
     if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=401,
-            detail="Tipo de token incorrecto"
-        )
+        raise HTTPException(status_code=401, detail="Tipo de token incorrecto")
 
     user_id = int(payload["sub"])
 
@@ -96,37 +89,26 @@ def _get_user_from_token(token: str) -> dict:
     conn.close()
 
     if not user or not user["activo"]:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no encontrado o desactivado"
-        )
+        raise HTTPException(status_code=401, detail="Usuario no encontrado o desactivado")
 
     return dict(user)
 
 
 # -------------------------
-# AUTH DEPENDENCIES (FIX PRINCIPAL)
+# AUTH (SIN OAUTH2 - ESTABLE)
 # -------------------------
 async def get_current_user(
-    token: Annotated[str | None, Depends(oauth2_scheme)] = None,
-):
-    print("TOKEN RAW:", token)
-
-    if not token:
-        raise HTTPException(status_code=401, detail="No token recibido")
-
-    try:
-        payload = decode_token(token)
-        print("PAYLOAD OK:", payload)
-        return _get_user_from_token(token)
-
-    except Exception as e:
-        print("ERROR JWT:", str(e))
-        raise
-    
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)]
+    authorization: str = Header(None)
 ) -> dict:
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Formato de token inválido")
+
+    token = authorization.split(" ")[1]
+
     return _get_user_from_token(token)
 
 
@@ -136,6 +118,9 @@ async def get_current_active_user(
     return user
 
 
+# -------------------------
+# ROLES
+# -------------------------
 def require_rol(*roles: str):
     async def checker(user: Annotated[dict, Depends(get_current_active_user)]):
         if user["rol"] not in roles:
