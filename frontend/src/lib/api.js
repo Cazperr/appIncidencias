@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const BASE = 'http://localhost:8000'
 
 // Carga el token inmediatamente al importar el modulo
 let _token = localStorage.getItem('metro_token') || null
@@ -15,6 +15,13 @@ export function clearToken() {
 export function getToken() { return _token }
 
 async function apiFetch(path, opts = {}) {
+  // Railway requiere trailing slash antes de query params
+  if (path.includes('?')) {
+    const [base, query] = path.split('?')
+    if (!base.endsWith('/')) path = base + '/?' + query
+  } else if (!path.endsWith('/')) {
+    path = path + '/'
+  }
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
   if (_token) headers['Authorization'] = `Bearer ${_token}`
 

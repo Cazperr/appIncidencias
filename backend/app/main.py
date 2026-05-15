@@ -1,9 +1,6 @@
 from fastapi import FastAPI, Request
-app = FastAPI(redirect_slashes=False)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-
-
 
 from app.core.config import get_settings
 from app.db.database import init_db
@@ -15,7 +12,6 @@ app = FastAPI(
     title="Gestión de Incidencias — Metro Madrid",
     description="API REST para la gestión de incidencias técnicas con Event Sourcing",
     version="2.0.0",
-    redirect_slashes=False,
 )
 
 # ── Forzar HTTPS en Railway (evita 307 http redirect) ────────────────────────
