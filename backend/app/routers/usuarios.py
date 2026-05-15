@@ -10,14 +10,27 @@ router = APIRouter(prefix="/api/usuarios", tags=["usuarios"])
 AdminOnly = Depends(require_rol("ADMIN"))
 
 
-# 🔥 FIX ESTABLE PARA TURSO (SIN cursor.description, SIN dict(row))
+# -------------------------
+# HELPERS
+# -------------------------
 def row_to_dict(row, columns):
-    return dict(zip(columns, row))
+    return {col: row[i] for i, col in enumerate(columns)}
 
 
-# =========================
+COLUMNS = [
+    "id",
+    "nombre",
+    "email",
+    "rol",
+    "activo",
+    "ultimo_login",
+    "created_at",
+]
+
+
+# -------------------------
 # LISTAR USUARIOS
-# =========================
+# -------------------------
 async def _list_impl(_=AdminOnly):
     conn = get_connection()
 
@@ -29,9 +42,7 @@ async def _list_impl(_=AdminOnly):
 
     conn.close()
 
-    columns = ["id", "nombre", "email", "rol", "activo", "ultimo_login", "created_at"]
-
-    return [row_to_dict(r, columns) for r in rows]
+    return [row_to_dict(r, COLUMNS) for r in rows]
 
 
 @router.get("/", response_model=list[UsuarioOut])
@@ -44,9 +55,9 @@ async def list_usuarios_no_slash(_=AdminOnly):
     return await _list_impl(_)
 
 
-# =========================
+# -------------------------
 # CREAR USUARIO
-# =========================
+# -------------------------
 async def _create_impl(body: UsuarioCreate, _=AdminOnly):
     conn = get_connection()
 
@@ -72,16 +83,15 @@ async def _create_impl(body: UsuarioCreate, _=AdminOnly):
     conn.commit()
     user_id = cur.lastrowid
 
-    row = conn.execute(
-        "SELECT id, nombre, email, rol, activo, ultimo_login, created_at FROM usuarios WHERE id=?",
-        (user_id,)
-    ).fetchone()
+    row = conn.execute("""
+        SELECT id, nombre, email, rol, activo, ultimo_login, created_at
+        FROM usuarios
+        WHERE id=?
+    """, (user_id,)).fetchone()
 
     conn.close()
 
-    columns = ["id", "nombre", "email", "rol", "activo", "ultimo_login", "created_at"]
-
-    return row_to_dict(row, columns)
+    return row_to_dict(row, COLUMNS)
 
 
 @router.post("/", response_model=UsuarioOut, status_code=201)
@@ -94,9 +104,9 @@ async def create_usuario_no_slash(body: UsuarioCreate, _=AdminOnly):
     return await _create_impl(body, _)
 
 
-# =========================
+# -------------------------
 # ACTUALIZAR USUARIO
-# =========================
+# -------------------------
 async def _update_impl(user_id: int, body: UsuarioUpdate, _=AdminOnly):
     conn = get_connection()
 
@@ -132,9 +142,7 @@ async def _update_impl(user_id: int, body: UsuarioUpdate, _=AdminOnly):
 
     conn.close()
 
-    columns = ["id", "nombre", "email", "rol", "activo", "ultimo_login", "created_at"]
-
-    return row_to_dict(row, columns)
+    return row_to_dict(row, COLUMNS)
 
 
 @router.put("/{user_id}", response_model=UsuarioOut)
@@ -147,9 +155,9 @@ async def update_usuario_with_slash(user_id: int, body: UsuarioUpdate, _=AdminOn
     return await _update_impl(user_id, body, _)
 
 
-# =========================
+# -------------------------
 # ELIMINAR USUARIO
-# =========================
+# -------------------------
 async def _delete_impl(
     user_id: int,
     current: Annotated[dict, Depends(get_current_active_user)],
