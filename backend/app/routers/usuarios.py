@@ -10,26 +10,28 @@ router = APIRouter(prefix="/api/usuarios", tags=["usuarios"])
 AdminOnly = Depends(require_rol("ADMIN"))
 
 
-# 🔥 FIX CLAVE: conversión segura de filas
-def row_to_dict(row, cursor):
-    if row is None:
-        return None
-    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+# 🔥 FIX ESTABLE PARA TURSO (SIN cursor.description, SIN dict(row))
+def row_to_dict(row, columns):
+    return dict(zip(columns, row))
 
 
+# =========================
+# LISTAR USUARIOS
+# =========================
 async def _list_impl(_=AdminOnly):
     conn = get_connection()
-    cursor = conn.execute(
-        """
+
+    rows = conn.execute("""
         SELECT id, nombre, email, rol, activo, ultimo_login, created_at
         FROM usuarios
         ORDER BY nombre
-        """
-    )
-    rows = cursor.fetchall()
+    """).fetchall()
+
     conn.close()
 
-    return [row_to_dict(r, cursor) for r in rows]
+    columns = ["id", "nombre", "email", "rol", "activo", "ultimo_login", "created_at"]
+
+    return [row_to_dict(r, columns) for r in rows]
 
 
 @router.get("/", response_model=list[UsuarioOut])
@@ -42,6 +44,9 @@ async def list_usuarios_no_slash(_=AdminOnly):
     return await _list_impl(_)
 
 
+# =========================
+# CREAR USUARIO
+# =========================
 async def _create_impl(body: UsuarioCreate, _=AdminOnly):
     conn = get_connection()
 
@@ -54,24 +59,29 @@ async def _create_impl(body: UsuarioCreate, _=AdminOnly):
         conn.close()
         raise HTTPException(status_code=400, detail="El email ya está registrado")
 
-    cur = conn.execute(
-        """
+    cur = conn.execute("""
         INSERT INTO usuarios (nombre, email, rol, password_hash)
         VALUES (?,?,?,?)
-        """,
-        (body.nombre, body.email, body.rol, hash_password(body.password)),
-    )
+    """, (
+        body.nombre,
+        body.email,
+        body.rol,
+        hash_password(body.password)
+    ))
 
     conn.commit()
     user_id = cur.lastrowid
 
-    cursor = conn.execute("SELECT * FROM usuarios WHERE id=?", (user_id,))
-    user = cursor.fetchone()
+    row = conn.execute(
+        "SELECT id, nombre, email, rol, activo, ultimo_login, created_at FROM usuarios WHERE id=?",
+        (user_id,)
+    ).fetchone()
 
-    result = row_to_dict(user, cursor)
     conn.close()
 
-    return result
+    columns = ["id", "nombre", "email", "rol", "activo", "ultimo_login", "created_at"]
+
+    return row_to_dict(row, columns)
 
 
 @router.post("/", response_model=UsuarioOut, status_code=201)
@@ -84,11 +94,14 @@ async def create_usuario_no_slash(body: UsuarioCreate, _=AdminOnly):
     return await _create_impl(body, _)
 
 
+# =========================
+# ACTUALIZAR USUARIO
+# =========================
 async def _update_impl(user_id: int, body: UsuarioUpdate, _=AdminOnly):
     conn = get_connection()
 
     user = conn.execute(
-        "SELECT * FROM usuarios WHERE id=?",
+        "SELECT id FROM usuarios WHERE id=?",
         (user_id,)
     ).fetchone()
 
@@ -98,7 +111,6 @@ async def _update_impl(user_id: int, body: UsuarioUpdate, _=AdminOnly):
 
     updates = body.model_dump(exclude_none=True)
 
-    # password safe handling
     if "password" in updates:
         updates["password_hash"] = hash_password(updates.pop("password"))
 
@@ -112,13 +124,17 @@ async def _update_impl(user_id: int, body: UsuarioUpdate, _=AdminOnly):
         )
         conn.commit()
 
-    cursor = conn.execute("SELECT * FROM usuarios WHERE id=?", (user_id,))
-    updated = cursor.fetchone()
+    row = conn.execute("""
+        SELECT id, nombre, email, rol, activo, ultimo_login, created_at
+        FROM usuarios
+        WHERE id=?
+    """, (user_id,)).fetchone()
 
-    result = row_to_dict(updated, cursor)
     conn.close()
 
-    return result
+    columns = ["id", "nombre", "email", "rol", "activo", "ultimo_login", "created_at"]
+
+    return row_to_dict(row, columns)
 
 
 @router.put("/{user_id}", response_model=UsuarioOut)
@@ -131,6 +147,9 @@ async def update_usuario_with_slash(user_id: int, body: UsuarioUpdate, _=AdminOn
     return await _update_impl(user_id, body, _)
 
 
+# =========================
+# ELIMINAR USUARIO
+# =========================
 async def _delete_impl(
     user_id: int,
     current: Annotated[dict, Depends(get_current_active_user)],
@@ -140,7 +159,12 @@ async def _delete_impl(
         raise HTTPException(status_code=400, detail="No puedes eliminarte a ti mismo")
 
     conn = get_connection()
-    conn.execute("DELETE FROM usuarios WHERE id=?", (user_id,))
+
+    conn.execute(
+        "DELETE FROM usuarios WHERE id=?",
+        (user_id,)
+    )
+
     conn.commit()
     conn.close()
 
