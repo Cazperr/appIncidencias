@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.core.config import get_settings
 from app.db.database import init_db
@@ -13,11 +14,19 @@ app = FastAPI(
     version="2.0.0",
 )
 
+# ── Forzar HTTPS en Railway (evita 307 http redirect) ────────────────────────
+@app.middleware("http")
+async def force_https(request: Request, call_next):
+    if request.headers.get("x-forwarded-proto") == "http":
+        url = str(request.url).replace("http://", "https://", 1)
+        return RedirectResponse(url=url, status_code=301)
+    return await call_next(request)
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_credentials=True,  # necesario para cookies de refresh token
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
