@@ -9,23 +9,83 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
+# ── Wrapper para libsql (no tiene row_factory) ────────────────────────────────
+
+class LibSQLRow(dict):
+    """Imita sqlite3.Row: acceso por nombre y por índice."""
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+class LibSQLCursor:
+    def __init__(self, cur):
+        self._cur = cur
+        self.description = cur.description
+        self.lastrowid = getattr(cur, 'lastrowid', None)
+
+    def _cols(self):
+        return [d[0] for d in self._cur.description]
+
+    def _to_row(self, raw):
+        if raw is None:
+            return None
+        return LibSQLRow(zip(self._cols(), raw))
+
+    def fetchone(self):
+        return self._to_row(self._cur.fetchone())
+
+    def fetchall(self):
+        return [LibSQLRow(zip(self._cols(), r)) for r in self._cur.fetchall()]
+
+    def __iter__(self):
+        return iter(self.fetchall())
+
+
+class LibSQLConnection:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql, params=()):
+        return LibSQLCursor(self._conn.execute(sql, params))
+
+    def executescript(self, sql):
+        return self._conn.executescript(sql)
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+    def sync(self):
+        if hasattr(self._conn, 'sync'):
+            self._conn.sync()
+
+
+# ── Conexión ──────────────────────────────────────────────────────────────────
+
 def get_connection():
     url = settings.DATABASE_URL
 
     if url.startswith("libsql://") or url.startswith("https://"):
         # Turso cloud
-        import libsql_experimental as libsql
-        conn = libsql.connect(
-            url,
+        import libsql
+        raw = libsql.connect(
+            ":memory:",
+            sync_url=url,
             auth_token=settings.TURSO_AUTH_TOKEN,
         )
-        conn.row_factory = sqlite3.Row
+        raw.sync()
+        conn = LibSQLConnection(raw)
     else:
         # SQLite local
         path = url.replace("sqlite:///", "")
-        conn = sqlite3.connect(path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
+        raw = sqlite3.connect(path)
+        raw.row_factory = sqlite3.Row
+        raw.execute("PRAGMA journal_mode=WAL")
+        conn = raw  # sqlite3 nativo ya tiene row_factory
 
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -96,7 +156,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre        TEXT NOT NULL,
     email         TEXT NOT NULL UNIQUE,
-    rol           TEXT NOT NULL DEFAULT 'TECNICO',  -- ADMIN | TECNICO | VIEWER
+    rol           TEXT NOT NULL DEFAULT 'TECNICO',
     password_hash TEXT NOT NULL,
     activo        INTEGER NOT NULL DEFAULT 1,
     ultimo_login  TEXT,
@@ -104,16 +164,14 @@ CREATE TABLE IF NOT EXISTS usuarios (
 );
 
 -- ── NUEVA: incidencia_eventos (Event Sourcing) ────────────────────────────────
--- Cada cambio de estado relevante genera un evento inmutable con timestamp.
--- tipo_evento: ASIGNADA | INICIO_TRABAJO | FIN_TRABAJO | SOLUCIONADA | REABIERTA
 CREATE TABLE IF NOT EXISTS incidencia_eventos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     incidencia_id INTEGER NOT NULL REFERENCES incidencias(id) ON DELETE CASCADE,
     usuario_id    INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    usuario_nombre TEXT,                             -- desnormalizado para historial
+    usuario_nombre TEXT,
     tipo_evento   TEXT NOT NULL,
     timestamp     TEXT DEFAULT (datetime('now','localtime')),
-    payload       TEXT DEFAULT '{}'                 -- JSON: notas, piezas, tiempos extra
+    payload       TEXT DEFAULT '{}'
 );
 
 CREATE INDEX IF NOT EXISTS idx_eventos_incidencia ON incidencia_eventos(incidencia_id);
@@ -125,8 +183,6 @@ def init_db():
     """Crea todas las tablas si no existen. Seguro de ejecutar varias veces."""
     conn = get_connection()
     conn.executescript(_SCHEMA)
-
-    # Migraciones no destructivas para DBs existentes
     _migrate(conn)
     conn.commit()
     conn.close()
@@ -143,4 +199,6 @@ def _migrate(conn):
         if col not in existing_inc:
             conn.execute(f"ALTER TABLE incidencias ADD COLUMN {col} {defn}")
             if col == "updated_at":
-                conn.execute("UPDATE incidencias SET updated_at = COALESCE(created_at, datetime('now','localtime')) WHERE updated_at IS NULL")
+                conn.execute(
+                    "UPDATE incidencias SET updated_at = COALESCE(created_at, datetime('now','localtime')) WHERE updated_at IS NULL"
+                )
