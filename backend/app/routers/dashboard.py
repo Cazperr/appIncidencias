@@ -70,7 +70,15 @@ async def _stats_impl(
 
         for row in conn.execute(query, params):
             if row["linea"]:
-                por_linea[row["linea"]] = row["n"]
+                # Si la incidencia pertenece a varias líneas (ej: "L4,L6,L9"),
+                # sumarla a cada línea individualmente
+                for linea in row["linea"].split(","):
+                    linea = linea.strip()
+                    if linea:
+                        por_linea[linea] = por_linea.get(linea, 0) + row["n"]
+
+        # Ordenar por cantidad descendente
+        por_linea = dict(sorted(por_linea.items(), key=lambda x: x[1], reverse=True))
 
         # Top equipos
         top_equipos = []
