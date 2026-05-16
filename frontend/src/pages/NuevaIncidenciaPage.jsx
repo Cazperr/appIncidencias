@@ -61,12 +61,14 @@ function BuscadorEstacion({ value, onChange, onLineaDetectada }) {
     setQuery(est)
     onChange(est)
     setOpen(false)
-    // Autodetectar línea
+    // Autorellenar líneas de la estación
     const lineas = ESTACION_LINEAS[est] || []
     if (lineas.length === 1) {
       onLineaDetectada(lineas[0])
     } else if (lineas.length > 1) {
       onLineaDetectada('__multiple__', lineas)
+    } else {
+      onLineaDetectada('')
     }
   }
 
@@ -164,9 +166,10 @@ export default function NuevaIncidenciaPage() {
   })
 
   function handleLineaDetectada(linea, opciones) {
-    // Si tiene varias líneas ponemos la primera; el campo linea sigue editable
     if (linea === '__multiple__') {
-      set('linea', (opciones && opciones[0]) || '')
+      set('linea', (opciones || []).join(','))
+    } else if (linea === '') {
+      set('linea', '')
     } else {
       set('linea', linea)
     }
@@ -249,25 +252,30 @@ export default function NuevaIncidenciaPage() {
           <div className="form-grid form-grid-2">
             <div className="field">
               <label>Línea</label>
-              <select value={form.linea} onChange={e => set('linea', e.target.value)}>
-                <option value="">— Seleccionar —</option>
-                {LINEAS.map(l => <option key={l}>{l}</option>)}
-              </select>
-              {form.estacion && (ESTACION_LINEAS[form.estacion] || []).length > 0 && (
-                <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-                  {(ESTACION_LINEAS[form.estacion] || []).map(l => {
-                    const bg = LINEA_COLORS[l] || '#444'
-                    const fg = LINEA_TEXT_DARK.has(l) ? '#111' : '#fff'
-                    return (
-                      <span key={l} onClick={() => set('linea', l)} style={{
-                        background: bg, color: fg, borderRadius: 4,
-                        padding: '2px 8px', fontSize: 11, fontWeight: 700,
-                        cursor: 'pointer', opacity: form.linea === l ? 1 : 0.5,
-                      }}>{l}</span>
-                    )
-                  })}
-                </div>
-              )}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                {LINEAS.map(l => {
+                  const activas = form.linea ? form.linea.split(',') : []
+                  const bg = LINEA_COLORS[l] || '#444'
+                  const fg = LINEA_TEXT_DARK.has(l) ? '#111' : '#fff'
+                  const sel = activas.includes(l)
+                  function toggleLinea() {
+                    const nuevas = sel
+                      ? activas.filter(x => x !== l)
+                      : [...activas, l]
+                    set('linea', nuevas.join(','))
+                  }
+                  return (
+                    <span key={l} onClick={toggleLinea} style={{
+                      background: sel ? bg : 'transparent',
+                      color: sel ? fg : 'var(--txt3)',
+                      border: `2px solid ${sel ? bg : 'var(--border)'}`,
+                      borderRadius: 6, padding: '5px 10px',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      transition: 'all .15s',
+                    }}>{l}</span>
+                  )
+                })}
+              </div>
             </div>
             <div className="field">
               <label>Estación</label>

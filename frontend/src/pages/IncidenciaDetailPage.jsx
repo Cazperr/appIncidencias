@@ -63,8 +63,7 @@ export default function IncidenciaDetailPage() {
   if (err && !inc) return <div className="page"><div className="alert alert-error">{err}</div></div>
 
   const estado  = inc.estado_actual
-  const lc      = LINEA_COLORS[inc.linea] || 'var(--border2)'
-  const fg      = LINEA_TEXT_DARK.has(inc.linea) ? '#111' : '#fff'
+  const lineas  = inc.linea ? inc.linea.split(',').filter(Boolean) : []
   const tiempos = inc._tiempos || {}
 
   const canAsignar    = ['PENDIENTE NOVA','PENDIENTE MMAD','REVISAR'].includes(estado)
@@ -94,11 +93,11 @@ export default function IncidenciaDetailPage() {
               <path d="M19 12H5M12 5l-7 7 7 7"/>
             </svg>
           </button>
-          {inc.linea && (
-            <span className="linea-dot" style={{ background: lc, color: fg, width: 36, height: 22, fontSize: 13 }}>
-              {inc.linea}
-            </span>
-          )}
+          {lineas.map(l => {
+            const bg = LINEA_COLORS[l] || 'var(--border2)'
+            const fg = LINEA_TEXT_DARK.has(l) ? '#111' : '#fff'
+            return <span key={l} className="linea-dot" style={{ background: bg, color: fg, width: 36, height: 22, fontSize: 13 }}>{l}</span>
+          })}
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700 }}>
             {inc.ot ? `OT ${inc.ot}` : `#${inc.id}`}
           </span>

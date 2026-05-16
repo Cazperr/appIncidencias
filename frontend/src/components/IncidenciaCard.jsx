@@ -3,8 +3,7 @@ import { estadoBadgeClass, prioBadgeClass, LINEA_COLORS, LINEA_TEXT_DARK, slaEnR
 
 export default function IncidenciaCard({ inc }) {
   const nav = useNavigate()
-  const lc  = LINEA_COLORS[inc.linea] || '#444'
-  const fg  = LINEA_TEXT_DARK.has(inc.linea) ? '#111' : '#fff'
+  const lineas = inc.linea ? inc.linea.split(',').filter(Boolean) : []
   const vencido = slaVencido(inc.fecha_limite_sla, inc.hora_limite_sla)
   const riesgo  = !vencido && slaEnRiesgo(inc.fecha_limite_sla, inc.hora_limite_sla)
 
@@ -20,9 +19,11 @@ export default function IncidenciaCard({ inc }) {
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {inc.linea && (
-            <span className="linea-dot" style={{ background: lc, color: fg }}>{inc.linea}</span>
-          )}
+          {lineas.map(l => {
+            const bg = LINEA_COLORS[l] || '#444'
+            const fg = LINEA_TEXT_DARK.has(l) ? '#111' : '#fff'
+            return <span key={l} className="linea-dot" style={{ background: bg, color: fg }}>{l}</span>
+          })}
           <span className={estadoBadgeClass(inc.estado_actual)}>{inc.estado_actual}</span>
           {inc.duplicada ? <span className="badge" style={{ background: 'rgba(229,0,20,.1)', color: '#ff6b6b', border: '1px solid rgba(229,0,20,.2)' }}>DUP</span> : null}
           {vencido && <span className="badge badge-sla">⚠ SLA VENCIDO</span>}
