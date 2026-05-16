@@ -128,6 +128,17 @@ async def update_incidencia(
     antes = dict(antes)
 
     data = body.model_dump(exclude_none=True)
+
+    # ── Optimistic locking ────────────────────────────────────────────────────
+    client_updated_at = data.pop("updated_at", None)
+    if client_updated_at and client_updated_at != antes.get("updated_at"):
+        conn.close()
+        raise HTTPException(
+            status_code=409,
+            detail="Conflicto: otro usuario modificó esta incidencia mientras la editabas. Recarga e intentalo de nuevo."
+        )
+    # ─────────────────────────────────────────────────────────────────────────
+
     if not data:
         conn.close()
         return {"detail": "Sin cambios"}
@@ -142,7 +153,7 @@ async def update_incidencia(
         cols = list(data.keys())
         set_clause = ",".join(f"{c}=?" for c in cols)
         vals = [data[k] for k in cols] + [inc_id]
-        conn.execute(f"UPDATE incidencias SET {set_clause} WHERE id=?", vals)
+        conn.execute(f"UPDATE incidencias SET {set_clause}, updated_at=datetime('now','localtime') WHERE id=?", vals)
 
         # Historial de campos
         campos_legibles = {

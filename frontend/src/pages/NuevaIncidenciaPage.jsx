@@ -1,7 +1,140 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { ESTADOS, PRIORIDADES, TIPOS, TIPO_AVISO, LINEAS } from '../lib/constants'
+import { ESTADOS, PRIORIDADES, TIPOS, TIPO_AVISO, LINEAS, ESTACIONES_METRO, LINEA_COLORS, LINEA_TEXT_DARK, ESTACION_LINEAS } from '../lib/constants'
+
+// ── Cálculo automático de SLA (horas hábiles 7:00-23:00) ────────────────────
+function calcularSLA(fechaHoraStr, prioridad) {
+  if (!fechaHoraStr || !prioridad || prioridad === 'Alta') return { fecha: '', hora: '' }
+  const horas = prioridad === 'Media' ? 12 : 16
+  const INICIO = 7, FIN = 23
+
+  const [fecha, hora] = fechaHoraStr.split(' ')
+  if (!fecha || !hora) return { fecha: '', hora: '' }
+  const [d, m, y] = fecha.split('/')
+  const [hh, mm] = hora.split(':')
+  if (!d || !m || !y || !hh || !mm) return { fecha: '', hora: '' }
+
+  let dt = new Date(+y, +m - 1, +d, +hh, +mm)
+
+  // Ajustar si está fuera del horario hábil
+  if (dt.getHours() < INICIO) {
+    dt.setHours(INICIO, 0, 0, 0)
+  } else if (dt.getHours() >= FIN || (dt.getHours() === FIN && dt.getMinutes() > 0)) {
+    dt.setDate(dt.getDate() + 1)
+    dt.setHours(INICIO, 0, 0, 0)
+  }
+
+  let restantes = horas * 60 // en minutos
+
+  while (restantes > 0) {
+    const minHastaFin = FIN * 60 - (dt.getHours() * 60 + dt.getMinutes())
+    if (restantes <= minHastaFin) {
+      dt = new Date(dt.getTime() + restantes * 60000)
+      restantes = 0
+    } else {
+      restantes -= minHastaFin
+      dt.setDate(dt.getDate() + 1)
+      dt.setHours(INICIO, 0, 0, 0)
+    }
+  }
+
+  const pad = n => String(n).padStart(2, '0')
+  const fecha_limite = `${pad(dt.getDate())}/${pad(dt.getMonth()+1)}/${dt.getFullYear()}`
+  const hora_limite  = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+  return { fecha: fecha_limite, hora: hora_limite }
+}
+
+// ── Buscador de estaciones ────────────────────────────────────────────────────
+function BuscadorEstacion({ value, onChange, onLineaDetectada }) {
+  const [query, setQuery] = useState(value || '')
+  const [open, setOpen] = useState(false)
+  const ref = React.useRef(null)
+
+  const normalizar = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
+  const sugerencias = query.length >= 1
+    ? ESTACIONES_METRO.filter(e => normalizar(e).includes(normalizar(query))).slice(0, 8)
+    : []
+
+  function seleccionar(est) {
+    setQuery(est)
+    onChange(est)
+    setOpen(false)
+    // Autodetectar línea
+    const lineas = ESTACION_LINEAS[est] || []
+    if (lineas.length === 1) {
+      onLineaDetectada(lineas[0])
+    } else if (lineas.length > 1) {
+      onLineaDetectada('__multiple__', lineas)
+    }
+  }
+
+  function handleInput(e) {
+    setQuery(e.target.value)
+    onChange(e.target.value)
+    setOpen(true)
+    if (!e.target.value) onLineaDetectada('')
+  }
+
+  React.useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        placeholder="Escribe para buscar estación..."
+        value={query}
+        onChange={handleInput}
+        onFocus={() => query.length >= 1 && setOpen(true)}
+        autoComplete="off"
+      />
+      {open && sugerencias.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+          background: 'var(--bg2)', border: '1px solid var(--border)',
+          borderRadius: 8, marginTop: 4, overflow: 'hidden',
+          boxShadow: '0 8px 24px rgba(0,0,0,.3)',
+        }}>
+          {sugerencias.map(est => {
+            const lineas = ESTACION_LINEAS[est] || []
+            return (
+              <div key={est}
+                onMouseDown={() => seleccionar(est)}
+                style={{
+                  padding: '10px 14px', cursor: 'pointer', fontSize: 14,
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  transition: 'background .1s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}
+              >
+                <span>📍 {est}</span>
+                <span style={{ display: 'flex', gap: 4 }}>
+                  {lineas.map(l => {
+                    const bg = LINEA_COLORS[l] || '#444'
+                    const fg = LINEA_TEXT_DARK.has(l) ? '#111' : '#fff'
+                    return (
+                      <span key={l} style={{
+                        background: bg, color: fg, borderRadius: 4,
+                        padding: '1px 6px', fontSize: 10, fontWeight: 700,
+                      }}>{l}</span>
+                    )
+                  })}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const HOY = new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'2-digit', year:'numeric' })
 const AHORA = new Date().toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })
@@ -22,7 +155,7 @@ export default function NuevaIncidenciaPage() {
     fecha_hora: `${HOY} ${AHORA}`,
     tipo: 'Correctivo',
     prioridad: 'Media',
-    sla: '',
+    sla: '12h',
     fecha_limite_sla: '',
     hora_limite_sla: '',
     solicitante: '',
@@ -30,7 +163,32 @@ export default function NuevaIncidenciaPage() {
     comentarios_generales: '',
   })
 
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  function handleLineaDetectada(linea, opciones) {
+    // Si tiene varias líneas ponemos la primera; el campo linea sigue editable
+    if (linea === '__multiple__') {
+      set('linea', (opciones && opciones[0]) || '')
+    } else {
+      set('linea', linea)
+    }
+  }
+
+  function set(k, v) {
+    setForm(f => {
+      const updated = { ...f, [k]: v }
+      // Recalcular SLA automáticamente al cambiar prioridad o fecha_hora
+      if (k === 'prioridad' || k === 'fecha_hora') {
+        const prio = k === 'prioridad' ? v : updated.prioridad
+        updated.sla = prio === 'Baja' ? '16h' : '12h'
+        const { fecha, hora } = calcularSLA(
+          k === 'fecha_hora' ? v : updated.fecha_hora,
+          prio
+        )
+        updated.fecha_limite_sla = fecha
+        updated.hora_limite_sla  = hora
+      }
+      return updated
+    })
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -95,10 +253,25 @@ export default function NuevaIncidenciaPage() {
                 <option value="">— Seleccionar —</option>
                 {LINEAS.map(l => <option key={l}>{l}</option>)}
               </select>
+              {form.estacion && (ESTACION_LINEAS[form.estacion] || []).length > 0 && (
+                <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                  {(ESTACION_LINEAS[form.estacion] || []).map(l => {
+                    const bg = LINEA_COLORS[l] || '#444'
+                    const fg = LINEA_TEXT_DARK.has(l) ? '#111' : '#fff'
+                    return (
+                      <span key={l} onClick={() => set('linea', l)} style={{
+                        background: bg, color: fg, borderRadius: 4,
+                        padding: '2px 8px', fontSize: 11, fontWeight: 700,
+                        cursor: 'pointer', opacity: form.linea === l ? 1 : 0.5,
+                      }}>{l}</span>
+                    )
+                  })}
+                </div>
+              )}
             </div>
             <div className="field">
               <label>Estación</label>
-              <input placeholder="Nombre estación" value={form.estacion} onChange={e => set('estacion', e.target.value)} />
+              <BuscadorEstacion value={form.estacion} onChange={v => set('estacion', v)} onLineaDetectada={handleLineaDetectada} />
             </div>
           </div>
 
@@ -124,7 +297,26 @@ export default function NuevaIncidenciaPage() {
             </div>
             <div className="field">
               <label>SLA</label>
-              <input placeholder="ej. 4h" value={form.sla} onChange={e => set('sla', e.target.value)} />
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                {['12h', '16h'].map(opt => (
+                  <button key={opt} type="button"
+                    onClick={() => set('sla', opt)}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: 8, fontWeight: 700,
+                      fontSize: 15, cursor: 'pointer', border: '2px solid',
+                      borderColor: form.sla === opt ? 'var(--accent)' : 'var(--border)',
+                      background: form.sla === opt ? 'var(--accent)' : 'transparent',
+                      color: form.sla === opt ? '#fff' : 'var(--txt2)',
+                      transition: 'all .15s',
+                    }}
+                  >{opt}</button>
+                ))}
+              </div>
+              {form.fecha_limite_sla && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                  ⏱ Límite: {form.fecha_limite_sla} {form.hora_limite_sla}
+                </div>
+              )}
             </div>
           </div>
 
@@ -136,17 +328,6 @@ export default function NuevaIncidenciaPage() {
             <div className="field">
               <label>Solicitante</label>
               <input placeholder="Nombre" value={form.solicitante} onChange={e => set('solicitante', e.target.value)} />
-            </div>
-          </div>
-
-          <div className="form-grid form-grid-2">
-            <div className="field">
-              <label>Límite SLA (fecha)</label>
-              <input placeholder="dd/mm/aaaa" value={form.fecha_limite_sla} onChange={e => set('fecha_limite_sla', e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Límite SLA (hora)</label>
-              <input placeholder="hh:mm" value={form.hora_limite_sla} onChange={e => set('hora_limite_sla', e.target.value)} />
             </div>
           </div>
 

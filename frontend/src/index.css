@@ -160,3 +160,102 @@ body { font-family: var(--font-mono); background: var(--bg); color: var(--txt); 
 .modal-title { font-family: var(--font-cond); font-size: 18px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .modal-close { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 6px; cursor: pointer; color: var(--txt2); transition: color .15s; }
 .modal-close:hover { color: var(--txt); }
+/* ── Impresión ────────────────────────────────────────────────────────────── */
+
+.print-overlay {
+  position: fixed;
+  inset: 0;
+  background: #f5f5f5;
+  z-index: 9999;
+  overflow-y: auto;
+}
+
+.print-toolbar {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+.print-doc {
+  max-width: 1000px;
+  margin: 24px auto;
+  background: #fff;
+  padding: 32px 40px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.1);
+  border-radius: 8px;
+}
+
+.print-header {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #333;
+}
+
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: #222;
+}
+
+.print-table th {
+  background: #1a1a2e;
+  color: #fff;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.print-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #eee;
+  vertical-align: top;
+}
+
+.print-table tr:nth-child(even) td {
+  background: #f9f9f9;
+}
+
+.print-table tr:hover td {
+  background: #f0f4ff;
+}
+
+.print-footer {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid #ddd;
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+}
+
+@media print {
+  .no-print { display: none !important; }
+
+  /* Ocultar todo excepto el documento de impresión */
+  body * { visibility: hidden; }
+  .print-doc, .print-doc * { visibility: visible; }
+
+  .print-overlay { position: static; background: white; }
+  .print-doc {
+    margin: 0;
+    padding: 20px;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  .print-table { font-size: 10px; }
+  .print-table th {
+    background: #333 !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

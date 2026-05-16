@@ -28,7 +28,10 @@ async function apiFetch(path, opts = {}) {
       window.location.href = '/login'
       return
     }
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    const detail = Array.isArray(err.detail)
+      ? err.detail.map(e => e.msg || JSON.stringify(e)).join(', ')
+      : (typeof err.detail === 'object' ? JSON.stringify(err.detail) : err.detail)
+    throw new Error(detail || `HTTP ${res.status}`)
   }
 
   if (res.status === 204) return null
