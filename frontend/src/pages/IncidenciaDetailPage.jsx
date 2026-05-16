@@ -64,6 +64,7 @@ export default function IncidenciaDetailPage() {
 
   const estado  = inc.estado_actual
   const lineas  = inc.linea ? inc.linea.split(',').filter(Boolean) : []
+  const lc      = LINEA_COLORS[lineas[0]] || '#444'
   const tiempos = inc._tiempos || {}
 
   const canAsignar    = ['PENDIENTE NOVA','PENDIENTE MMAD','REVISAR'].includes(estado)
