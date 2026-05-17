@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.database import init_db
-from app.routers import auth, usuarios, incidencias, dashboard
+from app.routers import auth, usuarios, incidencias, dashboard, pdf_parser
 
 app = FastAPI(
     title="Gestión de Incidencias — Metro Madrid",
@@ -33,6 +33,7 @@ app.include_router(auth.router)
 app.include_router(usuarios.router)
 app.include_router(incidencias.router)
 app.include_router(dashboard.router)
+app.include_router(pdf_parser.router)
 
 # ─────────────────────────────────────────────
 # STARTUP

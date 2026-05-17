@@ -193,6 +193,57 @@ export default function NuevaIncidenciaPage() {
     })
   }
 
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfErr, setPdfErr]         = useState('')
+  const [pdfKey, setPdfKey]         = useState(0)
+
+  async function handlePDF(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setPdfLoading(true); setPdfErr('')
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const token = localStorage.getItem('metro_token')
+      const res = await fetch(`${BASE}/api/pdf/parse`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || 'Error al leer el PDF')
+      }
+      const data = await res.json()
+      setForm(f => {
+        const updated = { ...f }
+        if (data.ot)                updated.ot               = data.ot
+        if (data.tipo)              updated.tipo              = data.tipo
+        if (data.prioridad)         updated.prioridad         = data.prioridad
+        if (data.equipo_afectado)   updated.equipo_afectado   = data.equipo_afectado
+        if (data.zona)              updated.zona              = data.zona
+        if (data.descripcion_fallo) updated.descripcion_fallo = data.descripcion_fallo
+        if (data.fecha_hora)        updated.fecha_hora        = data.fecha_hora
+        if (data.estacion) {
+          updated.estacion = data.estacion
+          const lineasEst = ESTACION_LINEAS[data.estacion] || []
+          if (lineasEst.length > 0) updated.linea = lineasEst.join(',')
+        }
+        const prio = data.prioridad || updated.prioridad
+        updated.sla = prio === 'Baja' ? '16h' : '12h'
+        if (updated.fecha_hora) {
+          const { fecha, hora } = calcularSLA(updated.fecha_hora, prio)
+          updated.fecha_limite_sla = fecha
+          updated.hora_limite_sla  = hora
+        }
+        return updated
+      })
+      if (data.estacion) setPdfKey(k => k + 1)
+    } catch(e) { setPdfErr(e.message) }
+    finally { setPdfLoading(false); e.target.value = '' }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.descripcion_fallo.trim()) { setErr('La descripción del fallo es obligatoria'); return }
@@ -211,8 +262,24 @@ export default function NuevaIncidenciaPage() {
         <div>
           <div className="page-title">Nueva incidencia</div>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={() => nav(-1)}>Cancelar</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', borderRadius: 'var(--radius)',
+            border: '1px solid var(--border2)', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, color: 'var(--txt2)',
+            background: 'var(--bg3)', fontFamily: 'var(--font-cond)',
+            opacity: pdfLoading ? 0.6 : 1,
+          }}>
+            {pdfLoading ? <span className="spinner" style={{ width: 14, height: 14 }}/> : '📄'}
+            {pdfLoading ? 'Leyendo...' : 'Importar PDF'}
+            <input type="file" accept=".pdf,.PDF" style={{ display: 'none' }} onChange={handlePDF} disabled={pdfLoading}/>
+          </label>
+          <button className="btn btn-ghost btn-sm" onClick={() => nav(-1)}>Cancelar</button>
+        </div>
       </div>
+
+      {pdfErr && <div className="alert alert-error" style={{ marginBottom: 12 }}>{pdfErr}</div>}
 
       <form onSubmit={handleSubmit}>
         <div className="form-grid">
@@ -279,7 +346,7 @@ export default function NuevaIncidenciaPage() {
             </div>
             <div className="field">
               <label>Estación</label>
-              <BuscadorEstacion value={form.estacion} onChange={v => set('estacion', v)} onLineaDetectada={handleLineaDetectada} />
+              <BuscadorEstacion key={pdfKey} value={form.estacion} onChange={v => set('estacion', v)} onLineaDetectada={handleLineaDetectada} />
             </div>
           </div>
 
