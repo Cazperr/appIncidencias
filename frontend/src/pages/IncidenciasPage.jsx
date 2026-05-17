@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
 import { ESTADOS, LINEAS, slaEnRiesgo, slaVencido, LINEA_COLORS } from '../lib/constants'
 import IncidenciaCard from '../components/IncidenciaCard'
+import { useAuth } from '../context/AuthContext'
 
 const LIMIT = 25
 
@@ -126,6 +127,8 @@ function PrintView({ items, filtros, onClose }) {
 
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function IncidenciasPage() {
+  const { user } = useAuth()
+  const [soloMias, setSoloMias]       = useState(false)
   const [items, setItems]           = useState([])
   const [total, setTotal]           = useState(0)
   const [loading, setLoading]       = useState(true)
@@ -147,12 +150,14 @@ export default function IncidenciasPage() {
   const estadoRef     = useRef('')
   const lineaRef      = useRef('')
   const busquedaRef   = useRef('')
+  const soloMiasRef   = useRef(false)
 
   const buildParams = (off) => {
     const params = new URLSearchParams()
     if (estadoRef.current)          params.set('estado', estadoRef.current)
     if (lineaRef.current)           params.set('linea', lineaRef.current)
     if (busquedaRef.current.trim()) params.set('busqueda', busquedaRef.current.trim())
+    if (soloMiasRef.current && user?.nombre) params.set('tecnico', user.nombre)
     params.set('limit', LIMIT)
     params.set('offset', off)
     return params
@@ -203,9 +208,10 @@ export default function IncidenciasPage() {
     estadoRef.current   = estado
     lineaRef.current    = linea
     busquedaRef.current = busqueda
+    soloMiasRef.current = soloMias
     const t = setTimeout(loadFresh, busqueda ? 350 : 0)
     return () => clearTimeout(t)
-  }, [estado, linea, busqueda, loadFresh])
+  }, [estado, linea, busqueda, soloMias, loadFresh])
 
   // Imprimir: carga TODAS las incidencias con los filtros actuales (sin paginación)
   const handlePrint = async () => {
@@ -276,8 +282,17 @@ export default function IncidenciasPage() {
             value={busqueda} onChange={e => setBusqueda(e.target.value)} style={{ fontSize: 15 }} />
         </div>
 
-        {/* Toggle SLA */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        {/* Toggles en una sola línea */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div className="toggle-wrap" style={{ cursor: 'pointer' }} onClick={() => setSoloMias(s => !s)}>
+            <span className="toggle">
+              <input type="checkbox" checked={soloMias} readOnly />
+              <span className="toggle-slider"/>
+            </span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: soloMias ? 'var(--accent2)' : 'var(--txt3)' }}>
+              👤 Mis incidencias
+            </span>
+          </div>
           <div className="toggle-wrap" style={{ cursor: 'pointer' }} onClick={() => setSoloSLA(s => !s)}>
             <span className="toggle">
               <input type="checkbox" checked={soloSLA} readOnly />

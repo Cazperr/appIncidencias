@@ -25,6 +25,7 @@ async def list_incidencias(
     estado: Optional[str] = None,
     linea: Optional[str] = None,
     busqueda: Optional[str] = None,
+    tecnico: Optional[str] = None,
     fecha_desde: Optional[str] = None,
     fecha_hasta: Optional[str] = None,
     limit: int = Query(default=25, ge=1, le=100),
@@ -38,7 +39,9 @@ async def list_incidencias(
     if estado:
         base += " AND estado_actual = ?"; p.append(estado)
     if linea:
-        base += " AND linea = ?"; p.append(linea)
+        base += " AND linea LIKE ?"; p.append(f"%{linea}%")
+    if tecnico:
+        base += " AND nombre_tecnico = ?"; p.append(tecnico)
     if busqueda:
         base += (" AND (ot LIKE ? OR estacion LIKE ? OR equipo_afectado LIKE ?"
                  " OR nombre_tecnico LIKE ? OR descripcion_fallo LIKE ?)")
