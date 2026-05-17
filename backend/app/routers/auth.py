@@ -15,8 +15,10 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 async def _login_impl(body: LoginRequest):
     conn = get_connection()
+    # Permite login con email, username o nombre completo
     user = conn.execute(
-        "SELECT * FROM usuarios WHERE email=? AND activo=1", (body.email,)
+        "SELECT * FROM usuarios WHERE (email=? OR username=? OR nombre=?) AND activo=1",
+        (body.email, body.email, body.email)
     ).fetchone()
     conn.close()
 

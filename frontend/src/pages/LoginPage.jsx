@@ -66,10 +66,10 @@ export default function LoginPage() {
           }}
         >
           <div className="field">
-            <label style={{ color: err ? 'var(--c-revisar)' : undefined }}>Email</label>
+            <label style={{ color: err ? 'var(--c-revisar)' : undefined }}>Usuario o email</label>
             <input
-              type="email" value={email} onChange={e => { setEmail(e.target.value); setErr('') }}
-              placeholder="tecnico@metro.es" required autoComplete="email" autoFocus
+              type="text" value={email} onChange={e => { setEmail(e.target.value); setErr('') }}
+              placeholder="Soulaiman o tecnico@metro.es" required autoComplete="username" autoFocus
               style={err ? inputErr : undefined}
             />
           </div>

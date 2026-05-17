@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS historial_cambios (
 CREATE TABLE IF NOT EXISTS usuarios (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre        TEXT NOT NULL,
+    username      TEXT UNIQUE,
     email         TEXT NOT NULL UNIQUE,
     rol           TEXT NOT NULL DEFAULT 'TECNICO',
     password_hash TEXT NOT NULL,
@@ -175,6 +176,11 @@ def init_db():
 
 def _migrate(conn):
     """Añade columnas nuevas a tablas existentes sin romper datos."""
+    # Migrar columna username en usuarios si no existe
+    existing_usr = {row[1] for row in conn.execute("PRAGMA table_info(usuarios)")}
+    if "username" not in existing_usr:
+        conn.execute("ALTER TABLE usuarios ADD COLUMN username TEXT")
+
     existing_inc = {row[1] for row in conn.execute("PRAGMA table_info(incidencias)")}
     for col, defn in [
         ("duplicada",    "INTEGER DEFAULT 0"),

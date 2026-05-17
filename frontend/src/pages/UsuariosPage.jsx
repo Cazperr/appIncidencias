@@ -60,7 +60,10 @@ export default function UsuariosPage() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.nombre}</div>
-                  <div style={{ fontSize: 11, color: 'var(--txt3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {u.username && <span style={{ color: 'var(--accent2)', marginRight: 6 }}>@{u.username}</span>}
+                    {u.email}
+                  </div>
                 </div>
                 <span style={{
                   fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
@@ -104,6 +107,7 @@ export default function UsuariosPage() {
 function UsuarioModal({ user, onClose, onDone }) {
   const [form, setForm] = useState({
     nombre: user?.nombre || '',
+    username: user?.username || '',
     email: user?.email || '',
     rol: user?.rol || 'TECNICO',
     password: '',
@@ -117,7 +121,7 @@ function UsuarioModal({ user, onClose, onDone }) {
     e.preventDefault()
     setLoading(true); setErr('')
     try {
-      const body = { nombre: form.nombre, email: form.email, rol: form.rol }
+      const body = { nombre: form.nombre, username: form.username || null, email: form.email, rol: form.rol }
       if (form.password) body.password = form.password
       if (user) { await api.put(`/api/usuarios/${user.id}`, body) }
       else {
@@ -140,8 +144,11 @@ function UsuarioModal({ user, onClose, onDone }) {
         </div>
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
-            <div className="field"><label>Nombre *</label>
-              <input value={form.nombre} onChange={e => set('nombre', e.target.value)} required />
+            <div className="field"><label>Nombre completo *</label>
+              <input value={form.nombre} onChange={e => set('nombre', e.target.value)} required placeholder="Alberto Gonzalez" />
+            </div>
+            <div className="field"><label>Username (para login rápido)</label>
+              <input value={form.username} onChange={e => set('username', e.target.value)} placeholder="agonzalez" />
             </div>
             <div className="field"><label>Email *</label>
               <input type="email" value={form.email} onChange={e => set('email', e.target.value)} required />

@@ -20,6 +20,7 @@ def row_to_dict(row, columns):
 COLUMNS = [
     "id",
     "nombre",
+    "username",
     "email",
     "rol",
     "activo",
@@ -35,7 +36,7 @@ async def _list_impl(_=AdminOnly):
     conn = get_connection()
 
     rows = conn.execute("""
-        SELECT id, nombre, email, rol, activo, ultimo_login, created_at
+        SELECT id, nombre, username, email, rol, activo, ultimo_login, created_at
         FROM usuarios
         ORDER BY nombre
     """).fetchall()
@@ -71,10 +72,11 @@ async def _create_impl(body: UsuarioCreate, _=AdminOnly):
         raise HTTPException(status_code=400, detail="El email ya está registrado")
 
     cur = conn.execute("""
-        INSERT INTO usuarios (nombre, email, rol, password_hash)
-        VALUES (?,?,?,?)
+        INSERT INTO usuarios (nombre, username, email, rol, password_hash)
+        VALUES (?,?,?,?,?)
     """, (
         body.nombre,
+        body.username,
         body.email,
         body.rol,
         hash_password(body.password)
@@ -84,7 +86,7 @@ async def _create_impl(body: UsuarioCreate, _=AdminOnly):
     user_id = cur.lastrowid
 
     row = conn.execute("""
-        SELECT id, nombre, email, rol, activo, ultimo_login, created_at
+        SELECT id, nombre, username, email, rol, activo, ultimo_login, created_at
         FROM usuarios
         WHERE id=?
     """, (user_id,)).fetchone()
@@ -135,7 +137,7 @@ async def _update_impl(user_id: int, body: UsuarioUpdate, _=AdminOnly):
         conn.commit()
 
     row = conn.execute("""
-        SELECT id, nombre, email, rol, activo, ultimo_login, created_at
+        SELECT id, nombre, username, email, rol, activo, ultimo_login, created_at
         FROM usuarios
         WHERE id=?
     """, (user_id,)).fetchone()

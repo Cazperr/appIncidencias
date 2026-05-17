@@ -21,6 +21,7 @@ class RefreshResponse(BaseModel):
 
 class UsuarioCreate(BaseModel):
     nombre: str
+    username: Optional[str] = None
     email: EmailStr
     rol: str = "TECNICO"
     password: str
@@ -34,6 +35,7 @@ class UsuarioCreate(BaseModel):
 
 class UsuarioUpdate(BaseModel):
     nombre: Optional[str] = None
+    username: Optional[str] = None
     email: Optional[EmailStr] = None
     rol: Optional[str] = None
     activo: Optional[bool] = None
@@ -42,6 +44,7 @@ class UsuarioUpdate(BaseModel):
 class UsuarioOut(BaseModel):
     id: int
     nombre: str
+    username: Optional[str] = None
     email: str
     rol: str
     activo: bool
