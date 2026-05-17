@@ -53,6 +53,9 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 15px; -webkit-tap-highlight-color: transparent; }
+* { cursor: default; user-select: none; }
+input, textarea, select, [contenteditable] { cursor: text; user-select: text; }
+a, button, label, [role="button"], .btn, .card, .toggle-wrap, .bottom-nav a { cursor: pointer; }
 body { font-family: var(--font-mono); background: var(--bg); color: var(--txt); min-height: 100dvh; overflow-x: hidden; transition: background .2s, color .2s; }
 #root { display: flex; flex-direction: column; min-height: 100dvh; }
 ::-webkit-scrollbar { width: 4px; }

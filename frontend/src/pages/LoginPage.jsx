@@ -46,7 +46,9 @@ export default function LoginPage() {
             width: 56, height: 56, borderRadius: 12,
             background: 'var(--accent)', marginBottom: 16,
           }}>
-            <span style={{ fontSize: 28, fontWeight: 900, color: 'white', fontFamily: 'var(--font-cond)', letterSpacing: '-1px' }}>N</span>
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <path d="M6 4 L6 24 L10 24 L18 10 L18 24 L22 24 L22 4 L18 4 L10 18 L10 4 Z" fill="white"/>
+            </svg>
           </div>
           <h1 style={{
             fontFamily: 'var(--font-cond)', fontSize: 26, fontWeight: 800,
@@ -64,10 +66,10 @@ export default function LoginPage() {
           }}
         >
           <div className="field">
-            <label style={{ color: err ? 'var(--c-revisar)' : undefined }}>Email</label>
+            <label style={{ color: err ? 'var(--c-revisar)' : undefined }}>Usuario o email</label>
             <input
-              type="email" value={email} onChange={e => { setEmail(e.target.value); setErr('') }}
-              placeholder="tecnico@metro.es" required autoComplete="email" autoFocus
+              type="text" value={email} onChange={e => { setEmail(e.target.value); setErr('') }}
+              placeholder="nombre o correo" required autoComplete="username" autoFocus
               style={err ? inputErr : undefined}
             />
           </div>
