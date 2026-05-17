@@ -46,9 +46,9 @@ export default function LoginPage() {
             width: 56, height: 56, borderRadius: 12,
             background: 'var(--accent)', marginBottom: 16,
           }}>
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              <path d="M6 4 L6 24 L10 24 L18 10 L18 24 L22 24 L22 4 L18 4 L10 18 L10 4 Z" fill="white"/>
-            </svg>
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 3V25H10V14L18 25H25V3H18V14L10 3H3Z" fill="white"/>
+          </svg>
           </div>
           <h1 style={{
             fontFamily: 'var(--font-cond)', fontSize: 26, fontWeight: 800,
