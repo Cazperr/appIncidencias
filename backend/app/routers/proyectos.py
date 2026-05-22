@@ -78,6 +78,20 @@ async def crear_proyecto(body: ProyectoCreate, _=RequireAdmin):
     return {"ok": True, "id": body.id}
 
 
+@router.put("/{proyecto_id}")
+@router.put("/{proyecto_id}/")
+async def editar_proyecto(proyecto_id: str, body: ProyectoCreate, _=RequireAdmin):
+    conn = get_master_connection()
+    conn.execute(
+        """UPDATE proyectos SET nombre=?, descripcion=?, initials=?, tipo=?, db_url=?, db_token=?
+           WHERE id=?""",
+        (body.nombre, body.descripcion, body.initials, body.tipo, body.db_url, body.db_token, proyecto_id)
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
 @router.delete("/{proyecto_id}")
 async def desactivar_proyecto(proyecto_id: str, _=RequireAdmin):
     conn = get_master_connection()
