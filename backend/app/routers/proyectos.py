@@ -36,7 +36,7 @@ class AsignarUsuario(BaseModel):
 async def listar_proyectos(_=RequireAdmin):
     conn = get_master_connection()
     rows = conn.execute(
-        "SELECT id, nombre, descripcion, initials, activo, created_at FROM proyectos"
+        "SELECT id, nombre, descripcion, initials, activo, created_at FROM proyectos WHERE activo = 1"
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -126,7 +126,46 @@ async def usuarios_proyecto(proyecto_id: str, _=RequireAdmin):
         """SELECT u.id, u.nombre, u.email, up.rol
            FROM usuarios u
            JOIN usuario_proyecto up ON up.usuario_id = u.id
-           WHERE up.proyecto_id = ?""",
+           WHERE up.proyecto_id = ? AND u.activo = 1""",
+        (proyecto_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ============================================================
+# NUEVOS ENDPOINTS PARA ADMIN (agregar al final)
+# ============================================================
+
+@router.get("/admin/usuarios")
+async def listar_todos_usuarios(current_user: Annotated[dict, Depends(get_current_active_user)]):
+    """[ADMIN] Obtener todos los usuarios del sistema"""
+    if current_user.get("rol") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Se requieren permisos de administrador")
+    
+    conn = get_master_connection()
+    rows = conn.execute(
+        "SELECT id, nombre, email, rol, activo FROM usuarios WHERE activo = 1 ORDER BY nombre"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@router.get("/admin/usuarios-disponibles/{proyecto_id}")
+async def listar_usuarios_disponibles(proyecto_id: str, current_user: Annotated[dict, Depends(get_current_active_user)]):
+    """[ADMIN] Obtener usuarios NO asignados a un proyecto"""
+    if current_user.get("rol") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Se requieren permisos de administrador")
+    
+    conn = get_master_connection()
+    rows = conn.execute(
+        """SELECT u.id, u.nombre, u.email, u.rol
+           FROM usuarios u
+           WHERE u.activo = 1 
+           AND u.id NOT IN (
+               SELECT up.usuario_id FROM usuario_proyecto up WHERE up.proyecto_id = ?
+           )
+           ORDER BY u.nombre""",
         (proyecto_id,)
     ).fetchall()
     conn.close()
