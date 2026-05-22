@@ -16,11 +16,7 @@ app = FastAPI(
 # ─────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://app-incidencias-git-feature-proyectos-92d583-cazperrs-projects.vercel.app",
-        "https://app-incidencias.vercel.app"
-    ],
+    allow_origins=["*"],  # Permite todos (solo para pruebas)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
