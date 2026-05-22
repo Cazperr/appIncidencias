@@ -6,16 +6,23 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.security import get_current_active_user, require_rol
-from app.db.database import get_connection
+from app.db.database import get_project_connection
 from app.db.eventos import (
     aplicar_cambio_estado, get_eventos, calcular_tiempos,
     registrar_evento, INICIO_TRABAJO, FIN_TRABAJO,
 )
-from app.models.schemas import IncidenciaCreate, IncidenciaUpdate, CierreIncidencia
+from app.models.schemas import IncidenciaCreate, IncidenciaUpdate, CierreIncidencia, VisitaParcialBody
 
 router = APIRouter(prefix="/api/incidencias", tags=["incidencias"])
 CurrentUser = Depends(get_current_active_user)
 TecnicoOrAdmin = Depends(require_rol("ADMIN", "TECNICO"))
+
+
+def _get_conn(user: dict):
+    proyecto_id = user.get("proyecto_id")
+    if not proyecto_id:
+        raise HTTPException(status_code=400, detail="No hay proyecto seleccionado. Selecciona un proyecto primero.")
+    return get_project_connection(proyecto_id)
 
 
 # ── GET /api/incidencias ──────────────────────────────────────────────────────
@@ -24,15 +31,18 @@ TecnicoOrAdmin = Depends(require_rol("ADMIN", "TECNICO"))
 async def list_incidencias(
     estado: Optional[str] = None,
     linea: Optional[str] = None,
+    zona: Optional[str] = None,
+    prioridad: Optional[str] = None,
+    tipo_aviso: Optional[str] = None,
     busqueda: Optional[str] = None,
     tecnico: Optional[str] = None,
     fecha_desde: Optional[str] = None,
     fecha_hasta: Optional[str] = None,
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    _: dict = CurrentUser,
+    current: dict = Depends(get_current_active_user),
 ):
-    conn = get_connection()
+    conn = _get_conn(current)
     base = "FROM incidencias WHERE 1=1"
     p = []
 
@@ -40,12 +50,19 @@ async def list_incidencias(
         base += " AND estado_actual = ?"; p.append(estado)
     if linea:
         base += " AND linea LIKE ?"; p.append(f"%{linea}%")
+    if zona:
+        base += " AND zona LIKE ?"; p.append(f"%{zona}%")
+    if prioridad:
+        base += " AND prioridad = ?"; p.append(prioridad)
+    if tipo_aviso:
+        base += " AND tipo_aviso = ?"; p.append(tipo_aviso)
     if tecnico:
         base += " AND nombre_tecnico = ?"; p.append(tecnico)
     if busqueda:
         base += (" AND (ot LIKE ? OR estacion LIKE ? OR equipo_afectado LIKE ?"
-                 " OR nombre_tecnico LIKE ? OR descripcion_fallo LIKE ?)")
-        b = f"%{busqueda}%"; p.extend([b, b, b, b, b])
+                 " OR zona LIKE ? OR solicitante LIKE ? OR nombre_tecnico LIKE ?"
+                 " OR descripcion_fallo LIKE ?)")
+        b = f"%{busqueda}%"; p.extend([b, b, b, b, b, b, b])
     if fecha_desde:
         d = _ddmm_to_iso(fecha_desde)
         if d:
@@ -72,15 +89,16 @@ async def list_incidencias(
 
 # ── GET /api/incidencias/{id} ─────────────────────────────────────────────────
 @router.get("/{inc_id}")
-async def get_incidencia(inc_id: int, _: dict = CurrentUser):
-    conn = get_connection()
+async def get_incidencia(inc_id: int, current: dict = Depends(get_current_active_user)):
+    conn = _get_conn(current)
     row = conn.execute("SELECT * FROM incidencias WHERE id=?", (inc_id,)).fetchone()
     conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Incidencia no encontrada")
     inc = dict(row)
-    # Adjuntar tiempos calculados desde eventos
-    inc["_tiempos"] = calcular_tiempos(inc_id)
+    conn = _get_conn(current)
+    inc["_tiempos"] = calcular_tiempos(inc_id, conn=conn)
+    conn.close()
     return inc
 
 
@@ -92,7 +110,7 @@ async def create_incidencia(
     current: Annotated[dict, Depends(get_current_active_user)],
 ):
     data = body.model_dump(exclude_none=True)
-    conn = get_connection()
+    conn = _get_conn(current)
     cols = list(data.keys())
     ph   = ",".join(["?"] * len(cols))
     vals = [data[k] for k in cols]
@@ -102,17 +120,16 @@ async def create_incidencia(
     conn.commit()
     new_id = cur.lastrowid
 
-    # Historial
     conn.execute(
         "INSERT INTO historial_cambios (incidencia_id, usuario, campo, valor_antes, valor_despues)"
         " VALUES (?,?,'CREACIÓN',NULL,?)",
         (new_id, current["nombre"], f"OT={data.get('ot','')} Estado={data.get('estado_actual','')}"),
     )
     conn.commit()
-    conn.close()
 
-    registrar_evento(new_id, "CREADA", current["id"], current["nombre"])
-    _recalculate_duplicates()
+    registrar_evento(new_id, "CREADA", current["id"], current["nombre"], conn=conn)
+    _recalculate_duplicates(conn)
+    conn.close()
     return {"id": new_id}
 
 
@@ -123,7 +140,7 @@ async def update_incidencia(
     body: IncidenciaUpdate,
     current: Annotated[dict, Depends(get_current_active_user)],
 ):
-    conn = get_connection()
+    conn = _get_conn(current)
     antes = conn.execute("SELECT * FROM incidencias WHERE id=?", (inc_id,)).fetchone()
     if not antes:
         conn.close()
@@ -132,7 +149,6 @@ async def update_incidencia(
 
     data = body.model_dump(exclude_none=True)
 
-    # ── Optimistic locking ────────────────────────────────────────────────────
     client_updated_at = data.pop("updated_at", None)
     if client_updated_at and client_updated_at != antes.get("updated_at"):
         conn.close()
@@ -140,16 +156,14 @@ async def update_incidencia(
             status_code=409,
             detail="Conflicto: otro usuario modificó esta incidencia mientras la editabas. Recarga e intentalo de nuevo."
         )
-    # ─────────────────────────────────────────────────────────────────────────
 
     if not data:
         conn.close()
         return {"detail": "Sin cambios"}
 
-    # Si cambia el estado → Event Sourcing
     nuevo_estado = data.get("estado_actual")
     if nuevo_estado and nuevo_estado != antes["estado_actual"]:
-        aplicar_cambio_estado(inc_id, nuevo_estado, current)
+        aplicar_cambio_estado(inc_id, nuevo_estado, current, conn=conn)
         data.pop("estado_actual", None)
 
     if data:
@@ -158,7 +172,6 @@ async def update_incidencia(
         vals = [data[k] for k in cols] + [inc_id]
         conn.execute(f"UPDATE incidencias SET {set_clause}, updated_at=datetime('now','localtime') WHERE id=?", vals)
 
-        # Historial de campos
         campos_legibles = {
             "estado_actual": "Estado", "ot": "OT", "equipo_afectado": "Equipo",
             "estacion": "Estación", "linea": "Línea", "prioridad": "Prioridad",
@@ -177,9 +190,9 @@ async def update_incidencia(
                     )
         conn.commit()
 
-    conn.close()
     if "equipo_afectado" in data:
-        _recalculate_duplicates()
+        _recalculate_duplicates(conn)
+    conn.close()
     return {"detail": "OK"}
 
 
@@ -189,12 +202,10 @@ async def asignar_incidencia(
     inc_id: int,
     current: Annotated[dict, Depends(require_rol("ADMIN", "TECNICO"))] = None,
 ):
-    """
-    El técnico logueado se asigna la incidencia.
-    Cambia estado a ASIGNADA y registra el evento con timestamp automático.
-    """
-    _check_exists(inc_id)
-    aplicar_cambio_estado(inc_id, "ASIGNADA", current)
+    conn = _get_conn(current)
+    _check_exists(inc_id, conn)
+    aplicar_cambio_estado(inc_id, "ASIGNADA", current, conn=conn)
+    conn.close()
     return {"detail": "Incidencia asignada", "tecnico": current["nombre"]}
 
 
@@ -204,10 +215,11 @@ async def iniciar_trabajo(
     inc_id: int,
     current: Annotated[dict, Depends(require_rol("ADMIN", "TECNICO"))] = None,
 ):
-    """Técnico pulsa 'Iniciar trabajo' → evento INICIO_TRABAJO con timestamp."""
-    _check_exists(inc_id)
-    aplicar_cambio_estado(inc_id, "EN CURSO", current)
-    tiempos = calcular_tiempos(inc_id)
+    conn = _get_conn(current)
+    _check_exists(inc_id, conn)
+    aplicar_cambio_estado(inc_id, "EN CURSO", current, conn=conn)
+    tiempos = calcular_tiempos(inc_id, conn=conn)
+    conn.close()
     return {"detail": "Trabajo iniciado", "timestamp_inicio": tiempos["timestamp_inicio"]}
 
 
@@ -218,48 +230,50 @@ async def solucionar_incidencia(
     body: CierreIncidencia,
     current: Annotated[dict, Depends(require_rol("ADMIN", "TECNICO"))] = None,
 ):
-    """
-    Cierre completo de incidencia:
-    1. Registra evento SOLUCIONADA con timestamp
-    2. Crea/actualiza registro en escalados con todos los datos de cierre
-    3. Cambia estado a SOLUCIONADA
-    """
-    _check_exists(inc_id)
+    conn = _get_conn(current)
+    _check_exists(inc_id, conn)
 
-    # Evento de cierre
-    aplicar_cambio_estado(inc_id, "SOLUCIONADA", current, payload=body.model_dump())
+    aplicar_cambio_estado(inc_id, body.estado_resultante or "SOLUCIONADA", current, payload=body.model_dump(), conn=conn)
 
-    # Tiempos automáticos desde eventos
-    tiempos = calcular_tiempos(inc_id)
+    tiempos = calcular_tiempos(inc_id, conn=conn)
     hoy     = datetime.date.today().strftime("%d/%m/%Y")
     ahora   = datetime.datetime.now().strftime("%H:%M")
 
-    hora_ini = body.hora_inicio_override or (
+    hora_ini  = body.hora_inicio_override or (
         tiempos["timestamp_inicio"][:16].split(" ")[-1] if tiempos["timestamp_inicio"] else ahora
     )
-    hora_fin = body.hora_fin_override or ahora
+    hora_fin  = body.hora_fin_override or ahora
+    fecha_ini = body.fecha_inicio_override or hoy
+    fecha_fin_val = body.fecha_fin_override or hoy
 
-    conn = get_connection()
-    # Buscar si ya existe un escalado para esta incidencia del técnico actual
+    # Serializar material y equipos en descripcion_trabajos si vienen del formulario genérico
+    desc = body.descripcion_trabajos
+    if body.material_descripcion:
+        desc += f"\n\n[MATERIAL]\n{body.material_descripcion}"
+    if body.equipos:
+        import json as _json
+        desc += f"\n\n[EQUIPOS]{_json.dumps([e if isinstance(e, dict) else e.model_dump() for e in body.equipos], ensure_ascii=False)}"
+
     existing = conn.execute(
         "SELECT id FROM escalados WHERE incidencia_id=? AND nombre_tecnico=? ORDER BY id DESC LIMIT 1",
         (inc_id, current["nombre"]),
     ).fetchone()
 
     escalado_data = {
-        "nombre_tecnico":       current["nombre"],
-        "fecha_fin":            hoy,
-        "hora_fin":             hora_fin,
-        "hora_inicio":          hora_ini,
+        "nombre_tecnico":        current["nombre"],
+        "fecha_inicio":          fecha_ini,
+        "hora_inicio":           hora_ini,
+        "fecha_fin":             fecha_fin_val,
+        "hora_fin":              hora_fin,
         "tiempo_desplazamiento": body.tiempo_desplazamiento,
-        "tiempo_actuacion":     str(tiempos.get("duracion_trabajo_min") or ""),
-        "num_tecnicos":         body.num_tecnicos,
-        "descripcion_trabajos": body.descripcion_trabajos,
-        "pieza_cambiada":       int(body.pieza_cambiada),
-        "sn_nueva":             body.sn_nueva,
-        "pn_nueva":             body.pn_nueva,
-        "sn_vieja":             body.sn_vieja,
-        "pn_vieja":             body.pn_vieja,
+        "tiempo_actuacion":      str(tiempos.get("duracion_trabajo_min") or ""),
+        "num_tecnicos":          body.num_tecnicos,
+        "descripcion_trabajos":  desc,
+        "pieza_cambiada":        int(body.pieza_cambiada),
+        "sn_nueva":              body.sn_nueva,
+        "pn_nueva":              body.pn_nueva,
+        "sn_vieja":              body.sn_vieja,
+        "pn_vieja":              body.pn_vieja,
     }
 
     if existing:
@@ -287,9 +301,11 @@ async def solucionar_incidencia(
 
 # ── GET /api/incidencias/{id}/eventos ────────────────────────────────────────
 @router.get("/{inc_id}/eventos")
-async def get_incidencia_eventos(inc_id: int, _: dict = CurrentUser):
-    _check_exists(inc_id)
-    eventos = get_eventos(inc_id)
+async def get_incidencia_eventos(inc_id: int, current: dict = Depends(get_current_active_user)):
+    conn = _get_conn(current)
+    _check_exists(inc_id, conn)
+    eventos = get_eventos(inc_id, conn=conn)
+    conn.close()
     for ev in eventos:
         if isinstance(ev.get("payload"), str):
             try:
@@ -301,8 +317,8 @@ async def get_incidencia_eventos(inc_id: int, _: dict = CurrentUser):
 
 # ── GET /api/incidencias/{id}/historial ──────────────────────────────────────
 @router.get("/{inc_id}/historial")
-async def get_historial(inc_id: int, _: dict = CurrentUser):
-    conn = get_connection()
+async def get_historial(inc_id: int, current: dict = Depends(get_current_active_user)):
+    conn = _get_conn(current)
     rows = conn.execute(
         "SELECT * FROM historial_cambios WHERE incidencia_id=? ORDER BY id DESC LIMIT 100",
         (inc_id,),
@@ -313,8 +329,8 @@ async def get_historial(inc_id: int, _: dict = CurrentUser):
 
 # ── GET /api/incidencias/{id}/escalados ──────────────────────────────────────
 @router.get("/{inc_id}/escalados")
-async def get_escalados(inc_id: int, _: dict = CurrentUser):
-    conn = get_connection()
+async def get_escalados(inc_id: int, current: dict = Depends(get_current_active_user)):
+    conn = _get_conn(current)
     rows = conn.execute(
         "SELECT * FROM escalados WHERE incidencia_id=? ORDER BY id ASC", (inc_id,)
     ).fetchall()
@@ -326,21 +342,128 @@ async def get_escalados(inc_id: int, _: dict = CurrentUser):
 @router.delete("/{inc_id}", status_code=204)
 async def delete_incidencia(
     inc_id: int,
-    _: Annotated[dict, Depends(require_rol("ADMIN"))] = None,
+    current: Annotated[dict, Depends(require_rol("ADMIN"))] = None,
 ):
-    conn = get_connection()
+    conn = _get_conn(current)
     conn.execute("DELETE FROM incidencias WHERE id=?", (inc_id,))
     conn.commit()
+    _recalculate_duplicates(conn)
     conn.close()
-    _recalculate_duplicates()
+
+
+# ── POST /api/incidencias/{id}/pendiente ─────────────────────────────────────
+class _PendienteBody(BaseModel):
+    motivo: str
+    descripcion_trabajos: str
+    tiempo_desplazamiento: str
+    num_tecnicos: int = 1
+
+@router.post("/{inc_id}/pendiente")
+async def pendiente_resolucion(
+    inc_id: int,
+    body: _PendienteBody,
+    current: Annotated[dict, Depends(require_rol("ADMIN", "TECNICO"))] = None,
+):
+    conn = _get_conn(current)
+    _check_exists(inc_id, conn)
+    tiempos = calcular_tiempos(inc_id, conn=conn)
+    hoy   = datetime.date.today().strftime("%d/%m/%Y")
+    ahora = datetime.datetime.now().strftime("%H:%M")
+    hora_ini = tiempos["timestamp_inicio"][:16].split(" ")[-1] if tiempos["timestamp_inicio"] else ahora
+
+    conn.execute(
+        """INSERT INTO escalados
+           (incidencia_id, nombre_tecnico, fecha_asignacion, fecha_inicio, hora_inicio,
+            fecha_fin, hora_fin, tiempo_desplazamiento, tiempo_actuacion,
+            num_tecnicos, descripcion_trabajos, pieza_cambiada)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,0)""",
+        (inc_id, current["nombre"], hoy, hoy, hora_ini, hoy, ahora,
+         body.tiempo_desplazamiento,
+         str(tiempos.get("duracion_trabajo_min") or ""),
+         body.num_tecnicos,
+         f"[ESCALADO PARCIAL] {body.descripcion_trabajos}"),
+    )
+    conn.commit()
+
+    aplicar_cambio_estado(inc_id, "PENDIENTE RESOLUCION", current,
+                          payload={"motivo": body.motivo, "descripcion": body.descripcion_trabajos},
+                          conn=conn)
+    conn.close()
+    return {"detail": "Incidencia en pendiente de resolucion"}
+
+
+# ── POST /api/incidencias/{id}/reanudar ──────────────────────────────────────
+@router.post("/{inc_id}/reanudar")
+async def reanudar_incidencia(
+    inc_id: int,
+    current: Annotated[dict, Depends(require_rol("ADMIN", "TECNICO"))] = None,
+):
+    conn = _get_conn(current)
+    _check_exists(inc_id, conn)
+    aplicar_cambio_estado(inc_id, "ASIGNADA", current,
+                          payload={"nota": "Reanudada tras pendiente resolucion"},
+                          conn=conn)
+    conn.close()
+    return {"detail": "Incidencia reanudada", "tecnico": current["nombre"]}
+
+
+
+# ── POST /api/incidencias/{id}/visita ────────────────────────────────────────
+@router.post("/{inc_id}/visita")
+async def registrar_visita(
+    inc_id: int,
+    body: VisitaParcialBody,
+    current: Annotated[dict, Depends(require_rol("ADMIN", "TECNICO"))] = None,
+):
+    """Registra un escalado parcial (visita técnica) en la incidencia."""
+    conn = _get_conn(current)
+    _check_exists(inc_id, conn)
+    hoy   = datetime.date.today().strftime("%d/%m/%Y")
+    ahora = datetime.datetime.now().strftime("%H:%M")
+
+    desc = body.descripcion_trabajos
+    if body.material_descripcion:
+        desc += f"\n\n[MATERIAL]\n{body.material_descripcion}"
+    if body.equipos:
+        import json as _json
+        desc += f"\n\n[EQUIPOS]{_json.dumps([e if isinstance(e, dict) else e.model_dump() for e in body.equipos], ensure_ascii=False)}"
+
+    conn.execute(
+        """INSERT INTO escalados
+           (incidencia_id, nombre_tecnico, fecha_asignacion, fecha_inicio, hora_inicio,
+            fecha_fin, hora_fin, tiempo_desplazamiento, num_tecnicos,
+            descripcion_trabajos, pieza_cambiada)
+           VALUES (?,?,?,?,?,?,?,?,?,?,0)""",
+        (
+            inc_id,
+            current["nombre"],
+            hoy,
+            body.fecha_inicio or hoy,
+            body.hora_inicio or ahora,
+            body.fecha_fin or hoy,
+            body.hora_fin or ahora,
+            body.tiempo_desplazamiento or "0",
+            body.num_tecnicos,
+            f"[ESCALADO PARCIAL] {desc}",
+        ),
+    )
+
+    ESTADOS_VALIDOS = {'EN CURSO', 'SOLUCIONADA', 'PENDIENTE RESOLUCION', 'ASIGNADA'}
+    if body.estado_resultante and body.estado_resultante in ESTADOS_VALIDOS:
+        conn.execute(
+            "UPDATE incidencias SET estado_actual=?, updated_at=datetime('now','localtime') WHERE id=?",
+            (body.estado_resultante, inc_id)
+        )
+
+    conn.commit()
+    conn.close()
+    return {"detail": "Visita registrada"}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _check_exists(inc_id: int):
-    conn = get_connection()
+def _check_exists(inc_id: int, conn):
     row = conn.execute("SELECT id FROM incidencias WHERE id=?", (inc_id,)).fetchone()
-    conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Incidencia no encontrada")
 
@@ -353,8 +476,7 @@ def _ddmm_to_iso(s: str) -> str | None:
         return None
 
 
-def _recalculate_duplicates():
-    conn = get_connection()
+def _recalculate_duplicates(conn):
     conn.execute("UPDATE incidencias SET duplicada=0, duplicada_de=NULL")
     rows = conn.execute(
         "SELECT id, equipo_afectado FROM incidencias"
@@ -373,56 +495,3 @@ def _recalculate_duplicates():
                     (ids[0], dup_id),
                 )
     conn.commit()
-    conn.close()
-
-
-# ── POST /api/incidencias/{id}/pendiente ─────────────────────────────────────
-class _PendienteBody(BaseModel):
-    motivo: str
-    descripcion_trabajos: str
-    tiempo_desplazamiento: str
-    num_tecnicos: int = 1
-
-@router.post("/{inc_id}/pendiente")
-async def pendiente_resolucion(
-    inc_id: int,
-    body: _PendienteBody,
-    current: Annotated[dict, Depends(require_rol("ADMIN", "TECNICO"))] = None,
-):
-    _check_exists(inc_id)
-    tiempos = calcular_tiempos(inc_id)
-    hoy   = datetime.date.today().strftime("%d/%m/%Y")
-    ahora = datetime.datetime.now().strftime("%H:%M")
-    hora_ini = tiempos["timestamp_inicio"][:16].split(" ")[-1] if tiempos["timestamp_inicio"] else ahora
-
-    conn = get_connection()
-    conn.execute(
-        """INSERT INTO escalados
-           (incidencia_id, nombre_tecnico, fecha_asignacion, fecha_inicio, hora_inicio,
-            fecha_fin, hora_fin, tiempo_desplazamiento, tiempo_actuacion,
-            num_tecnicos, descripcion_trabajos, pieza_cambiada)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,0)""",
-        (inc_id, current["nombre"], hoy, hoy, hora_ini, hoy, ahora,
-         body.tiempo_desplazamiento,
-         str(tiempos.get("duracion_trabajo_min") or ""),
-         body.num_tecnicos,
-         f"[VISITA PARCIAL] {body.descripcion_trabajos}"),
-    )
-    conn.commit()
-    conn.close()
-
-    aplicar_cambio_estado(inc_id, "PENDIENTE RESOLUCION", current,
-                          payload={"motivo": body.motivo, "descripcion": body.descripcion_trabajos})
-    return {"detail": "Incidencia en pendiente de resolucion"}
-
-
-# ── POST /api/incidencias/{id}/reanudar ──────────────────────────────────────
-@router.post("/{inc_id}/reanudar")
-async def reanudar_incidencia(
-    inc_id: int,
-    current: Annotated[dict, Depends(require_rol("ADMIN", "TECNICO"))] = None,
-):
-    _check_exists(inc_id)
-    aplicar_cambio_estado(inc_id, "ASIGNADA", current,
-                          payload={"nota": "Reanudada tras pendiente resolucion"})
-    return {"detail": "Incidencia reanudada", "tecnico": current["nombre"]}

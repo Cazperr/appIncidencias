@@ -1,13 +1,15 @@
 // Mapeo de estados a clases Tailwind
 export const estadoClass = (estado) => {
   const map = {
-    'PENDIENTE NOVA': 'estado-PENDIENTE-NOVA',
-    'PENDIENTE MMAD': 'estado-PENDIENTE-MMAD',
-    'REVISAR':        'estado-REVISAR',
-    'ASIGNADA':       'estado-ASIGNADA',
-    'EN CURSO':       'estado-EN-CURSO',
-    'SOLUCIONADA':    'estado-SOLUCIONADA',
-    'FINALIZADA':     'estado-FINALIZADA',
+    'PENDIENTE NOVA':     'estado-PENDIENTE-NOVA',
+    'PENDIENTE NOVATION': 'estado-PENDIENTE-NOVA',
+    'PENDIENTE MMAD':     'estado-PENDIENTE-MMAD',
+    'PENDIENTE REVISAR':  'estado-PENDIENTE-MMAD',
+    'REVISAR':            'estado-REVISAR',
+    'ASIGNADA':           'estado-ASIGNADA',
+    'EN CURSO':           'estado-EN-CURSO',
+    'SOLUCIONADA':        'estado-SOLUCIONADA',
+    'FINALIZADA':         'estado-FINALIZADA',
   }
   return map[estado] || 'bg-bg-3 border border-border text-text-dim'
 }

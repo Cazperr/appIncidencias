@@ -2,10 +2,50 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import { estadoBadgeClass, prioBadgeClass, LINEA_COLORS, LINEA_TEXT_DARK, fmtTs } from '../lib/constants'
+import { estadoBadgeClass, estadoAccentColor, prioBadgeClass, LINEA_COLORS, LINEA_TEXT_DARK, ESTADOS, ESTADOS_GENERICOS, fmtTs } from '../lib/constants'
 import ModalCierre from '../components/ModalCierre'
+import ModalCierreGenerico from '../forms/generic/ModalCierreGenerico'
+import ModalCierreMetro from '../forms/metro/ModalCierreMetro'
 import ModalPendiente from '../components/ModalPendiente'
 import ModalEditarIncidencia from '../components/ModalEditarIncidencia'
+import ModalVisitaGenerico from '../forms/generic/ModalVisitaGenerico'
+import ModalCambiarEstado from '../components/ModalCambiarEstado'
+
+function isEscaladoParcial(desc) {
+  return desc?.startsWith('[ESCALADO PARCIAL]') || desc?.startsWith('[VISITA PARCIAL]')
+}
+function limpiarDescEscalado(desc) {
+  if (!desc) return desc
+  return desc.replace(/^\[(ESCALADO|VISITA) PARCIAL\]\s*/, '')
+}
+
+const IconEscalado = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3v12"/>
+    <path d="M7 8l5-5 5 5"/>
+    <path d="M5 21h14"/>
+  </svg>
+)
+
+function ActionButton({ variant, icon, children, onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      className={`detail-action detail-action--${variant}`}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {icon != null && (
+        <span className="detail-action-icon" aria-hidden>
+          {typeof icon === 'string' ? icon : icon}
+        </span>
+      )}
+      <span>{children}</span>
+    </button>
+  )
+}
+
+const ESTADOS_FILTRO_GENERICO = ['PENDIENTE NOVA', 'PENDIENTE REVISAR', 'SOLUCIONADA']
 
 const TIPO_EVENTO_LABEL = {
   CREADA: 'Creada',
@@ -21,7 +61,7 @@ const TIPO_EVENTO_LABEL = {
 export default function IncidenciaDetailPage() {
   const { id }   = useParams()
   const nav      = useNavigate()
-  const { user } = useAuth()
+  const { user, proyecto } = useAuth()
 
   const [inc, setInc]           = useState(null)
   const [eventos, setEventos]   = useState([])
@@ -33,6 +73,8 @@ export default function IncidenciaDetailPage() {
   const [showPendiente, setShowPendiente] = useState(false)
   const [showReasignar, setShowReasignar] = useState(false)
   const [showEditar, setShowEditar] = useState(false)
+  const [showEscalado, setShowEscalado] = useState(false)
+  const [showCambiarEstado, setShowCambiarEstado] = useState(false)
   const [tab, setTab]           = useState('info')
 
   async function load() {
@@ -67,29 +109,37 @@ export default function IncidenciaDetailPage() {
   const lc      = LINEA_COLORS[lineas[0]] || '#444'
   const tiempos = inc._tiempos || {}
 
-  const canAsignar    = ['PENDIENTE NOVA','PENDIENTE MMAD','REVISAR'].includes(estado)
-  const canIniciar    = estado === 'ASIGNADA'
-  const canSolucionar = estado === 'EN CURSO'
-  const canPendiente  = estado === 'EN CURSO'
-  const canReanudar   = estado === 'PENDIENTE RESOLUCION'
+  const isMetro = proyecto?.tipo === 'metro'
+  const canAsignar    = isMetro && ['PENDIENTE NOVA','PENDIENTE MMAD','REVISAR'].includes(estado)
+  const canIniciar    = isMetro && estado === 'ASIGNADA'
+  const canSolucionar = isMetro && estado === 'EN CURSO'
+  const canPendiente  = isMetro && estado === 'EN CURSO'
+  const canReanudar   = isMetro && estado === 'PENDIENTE RESOLUCION'
+  const canEscalado   = !['SOLUCIONADA', 'FINALIZADA'].includes(estado)
+  const headerAccent  = lineas.length ? lc : estadoAccentColor(estado)
+  const isCerrada     = ['SOLUCIONADA', 'FINALIZADA'].includes(estado)
+  const hasTiempos    = !!(tiempos.timestamp_asignada || tiempos.timestamp_inicio
+    || tiempos.timestamp_fin || tiempos.duracion_trabajo_min != null)
+  const ultimoEscalado = escalados.length > 0 ? escalados[escalados.length - 1] : null
+
+  const accionesVisibles = [
+    canAsignar, canIniciar, canSolucionar, canPendiente, canReanudar, canEscalado,
+    ['ADMIN', 'TECNICO'].includes(user?.rol),
+    user?.rol === 'ADMIN' && isMetro,
+  ].filter(Boolean).length
 
   return (
-    <div className="page" style={{ paddingTop: 0 }}>
+    <div className="page detail-page">
 
-      {/* Header */}
-      <div style={{
-        background: `linear-gradient(135deg, ${lc}22 0%, var(--bg2) 60%)`,
-        borderBottom: `1px solid ${lc}44`,
-        padding: '16px 16px 14px',
-        margin: '0 -16px', marginBottom: 16,
-        position: 'sticky', top: 0, zIndex: 50,
-        backdropFilter: 'blur(8px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <button onClick={() => nav(-1)} style={{
-            background: 'var(--bg3)', border: '1px solid var(--border)',
-            borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: 'var(--txt2)',
-          }}>
+      <div
+        className="detail-header"
+        style={{
+          background: `linear-gradient(135deg, ${headerAccent}28 0%, var(--bg2) 55%)`,
+          borderBottomColor: `${headerAccent}55`,
+        }}
+      >
+        <div className="detail-header-top">
+          <button type="button" className="detail-back" onClick={() => nav(-1)} aria-label="Volver">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M19 12H5M12 5l-7 7 7 7"/>
             </svg>
@@ -99,61 +149,73 @@ export default function IncidenciaDetailPage() {
             const fg = LINEA_TEXT_DARK.has(l) ? '#111' : '#fff'
             return <span key={l} className="linea-dot" style={{ background: bg, color: fg, width: 36, height: 22, fontSize: 13 }}>{l}</span>
           })}
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700 }}>
-            {inc.ot ? `OT ${inc.ot}` : `#${inc.id}`}
-          </span>
-          <span className={estadoBadgeClass(estado)} style={{ marginLeft: 'auto' }}>{estado}</span>
+          <span className="detail-title">{inc.ot ? `OT ${inc.ot}` : `#${inc.id}`}</span>
+          <button
+            type="button"
+            className={`${estadoBadgeClass(estado)} detail-estado-badge`}
+            onClick={() => setShowCambiarEstado(true)}
+            title="Cambiar estado"
+          >
+            {estado}
+          </button>
         </div>
 
-        {/* Botones de acción */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className={`detail-actions${accionesVisibles <= 2 ? ' detail-actions--inline' : ''}`}>
           {canAsignar && (
-            <button className="btn btn-warn btn-sm" disabled={actionLoading}
+            <ActionButton variant="warn" icon="📋" disabled={actionLoading}
               onClick={() => accion(`/api/incidencias/${id}/asignar`)}>
-              📋 Asignarme
-            </button>
+              Asignarme
+            </ActionButton>
           )}
           {canIniciar && (
-            <button className="btn btn-primary btn-sm" disabled={actionLoading}
+            <ActionButton variant="primary" icon="🔧" disabled={actionLoading}
               onClick={() => accion(`/api/incidencias/${id}/iniciar`)}>
-              🔧 Iniciar trabajo
-            </button>
+              Iniciar trabajo
+            </ActionButton>
           )}
           {canSolucionar && (
-            <button className="btn btn-success btn-sm" disabled={actionLoading}
+            <ActionButton variant="success" icon="✓" disabled={actionLoading}
               onClick={() => setShowCierre(true)}>
-              ✅ Solucionar
-            </button>
+              Solucionar
+            </ActionButton>
           )}
           {canPendiente && (
-            <button className="btn btn-danger btn-sm" disabled={actionLoading}
+            <ActionButton variant="danger" icon="⏳" disabled={actionLoading}
               onClick={() => setShowPendiente(true)}>
-              ⏳ Pendiente resolución
-            </button>
+              Pendiente resolución
+            </ActionButton>
           )}
           {canReanudar && (
-            <button className="btn btn-primary btn-sm" disabled={actionLoading}
+            <ActionButton variant="primary" icon="▶" disabled={actionLoading}
               onClick={() => accion(`/api/incidencias/${id}/reanudar`)}>
-              ▶️ Reanudar
-            </button>
+              Reanudar
+            </ActionButton>
           )}
-          {/* Editar — siempre visible para ADMIN/TECNICO */}
-          {['ADMIN','TECNICO'].includes(user?.rol) && (
-            <button className="btn btn-ghost btn-sm" disabled={actionLoading}
+          {canEscalado && (
+            <ActionButton variant="escalado" icon={<IconEscalado />} disabled={actionLoading}
+              onClick={() => setShowEscalado(true)}>
+              Añadir escalado
+            </ActionButton>
+          )}
+          {['ADMIN', 'TECNICO'].includes(user?.rol) && (
+            <ActionButton variant="neutral" icon="✎" disabled={actionLoading}
               onClick={() => setShowEditar(true)}>
-              ✏️ Editar
-            </button>
+              Editar
+            </ActionButton>
           )}
-          {/* Asignar a — siempre visible para ADMIN */}
-          {user?.rol === 'ADMIN' && (
-            <button className="btn btn-ghost btn-sm" disabled={actionLoading}
+          {user?.rol === 'ADMIN' && isMetro && (
+            <ActionButton variant="neutral" icon="👥" disabled={actionLoading}
               onClick={() => setShowReasignar(true)}>
-              👥 Asignar a
-            </button>
+              Asignar a
+            </ActionButton>
           )}
-          {actionLoading && <div className="spinner" style={{ margin: 'auto 0' }}/>}
         </div>
-        {err && <div className="alert alert-error" style={{ marginTop: 8, padding: '8px 10px', fontSize: 12 }}>{err}</div>}
+        {actionLoading && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+            <div className="spinner"/>
+          </div>
+        )}
+        {err && <div className="alert alert-error" style={{ marginTop: 10, padding: '8px 10px', fontSize: 12 }}>{err}</div>}
       </div>
 
       {/* Banner estado PENDIENTE RESOLUCION */}
@@ -171,83 +233,98 @@ export default function IncidenciaDetailPage() {
         )
       })()}
 
-      {/* Tiempos */}
-      {['ASIGNADA','EN CURSO','SOLUCIONADA','PENDIENTE RESOLUCION'].includes(estado) && (
-        <div className="card" style={{ marginBottom: 14, background: 'var(--bg3)', borderColor: 'var(--accent)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+      {isCerrada && (
+        <div className="detail-banner detail-banner--sol">
+          <span className="detail-banner-icon">✓</span>
+          <div>
+            <div className="detail-banner-title">Incidencia solucionada</div>
+            {ultimoEscalado ? (
+              <div className="detail-banner-sub">
+                Último escalado: {ultimoEscalado.fecha_fin || ultimoEscalado.fecha_inicio}
+                {ultimoEscalado.hora_fin ? ` · ${ultimoEscalado.hora_fin}` : ''}
+                {ultimoEscalado.nombre_tecnico ? ` — ${ultimoEscalado.nombre_tecnico}` : ''}
+              </div>
+            ) : inc.fecha_hora ? (
+              <div className="detail-banner-sub">Aviso registrado: {inc.fecha_hora}</div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {hasTiempos && (
+        <div className="card detail-tiempos-card">
           {tiempos.timestamp_asignada && (
             <div>
-              <div style={{ fontSize: 10, color: 'var(--txt3)', fontFamily: 'var(--font-cond)', letterSpacing: '.08em', textTransform: 'uppercase' }}>Asignada</div>
-              <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--c-asignada)' }}>{fmtTs(tiempos.timestamp_asignada)}</div>
+              <div className="detail-tiempo-label">Asignada</div>
+              <div className="detail-tiempo-val" style={{ color: 'var(--c-asignada)' }}>{fmtTs(tiempos.timestamp_asignada)}</div>
             </div>
           )}
           {tiempos.timestamp_inicio && (
             <div>
-              <div style={{ fontSize: 10, color: 'var(--txt3)', fontFamily: 'var(--font-cond)', letterSpacing: '.08em', textTransform: 'uppercase' }}>Inicio</div>
-              <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--c-curso)' }}>{fmtTs(tiempos.timestamp_inicio)}</div>
+              <div className="detail-tiempo-label">Inicio</div>
+              <div className="detail-tiempo-val" style={{ color: 'var(--c-curso)' }}>{fmtTs(tiempos.timestamp_inicio)}</div>
             </div>
           )}
           {tiempos.timestamp_fin && (
             <div>
-              <div style={{ fontSize: 10, color: 'var(--txt3)', fontFamily: 'var(--font-cond)', letterSpacing: '.08em', textTransform: 'uppercase' }}>Fin</div>
-              <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--c-sol)' }}>{fmtTs(tiempos.timestamp_fin)}</div>
+              <div className="detail-tiempo-label">Fin</div>
+              <div className="detail-tiempo-val" style={{ color: 'var(--c-sol)' }}>{fmtTs(tiempos.timestamp_fin)}</div>
             </div>
           )}
           {tiempos.duracion_trabajo_min != null && (
-            <div style={{ marginLeft: 'auto' }}>
-              <div style={{ fontSize: 10, color: 'var(--txt3)', fontFamily: 'var(--font-cond)', letterSpacing: '.08em', textTransform: 'uppercase' }}>Duración</div>
-              <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{tiempos.duracion_trabajo_min} min</div>
+            <div className="detail-tiempo-duracion">
+              <div className="detail-tiempo-label">Duración</div>
+              <div className="detail-tiempo-val detail-tiempo-val--bold">{tiempos.duracion_trabajo_min} min</div>
             </div>
           )}
         </div>
       )}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 14, background: 'var(--bg2)', borderRadius: 'var(--radius)', padding: 4, border: '1px solid var(--border)' }}>
-        {['info','eventos','escalados'].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            flex: 1, padding: '8px 0',
-            background: tab === t ? 'var(--bg4)' : 'transparent',
-            border: 'none', borderRadius: 4, cursor: 'pointer',
-            fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 800,
-            letterSpacing: '.06em', textTransform: 'uppercase',
-            color: tab === t ? 'var(--txt)' : 'var(--txt3)',
-            transition: 'all .15s',
-          }}>
-            {t === 'info' ? 'Info' : t === 'eventos' ? `Eventos (${eventos.length})` : `Visitas (${escalados.length})`}
+      <div className="detail-tabs">
+        {['info', 'eventos', 'escalados'].map(t => (
+          <button
+            key={t}
+            type="button"
+            className={`detail-tab${tab === t ? ' detail-tab--active' : ''}`}
+            onClick={() => setTab(t)}
+          >
+            {t === 'info' ? 'Info' : t === 'eventos' ? `Eventos (${eventos.length})` : `Escalados (${escalados.length})`}
           </button>
         ))}
       </div>
 
       {/* Tab INFO */}
       {tab === 'info' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10,  fontWeight: 600, fontSize: 14 }}>
-          <InfoRow label="Equipo" value={inc.equipo_afectado} />
-          <InfoRow label="Estacion" value={inc.estacion} />
-          <InfoRow label="Zona" value={inc.zona} />
-          <InfoRow label="Tipo aviso" value={inc.tipo_aviso} />
-          <InfoRow label="Tipo" value={inc.tipo} />
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}><InfoRow label="Prioridad" value={<span className={prioBadgeClass(inc.prioridad)}>{inc.prioridad}</span>} /></div>
-            <div style={{ flex: 1 }}><InfoRow label="SLA" value={inc.sla} /></div>
+        <>
+          <div className="detail-info-grid">
+            <InfoRow label="Equipo" value={inc.equipo_afectado} />
+            <InfoRow label="Estación" value={inc.estacion} />
+            <InfoRow label="Zona" value={inc.zona} />
+            <InfoRow label="Tipo aviso" value={inc.tipo_aviso} />
+            <InfoRow label="Tipo" value={inc.tipo} />
+            <InfoRow label="Prioridad" value={inc.prioridad ? <span className={prioBadgeClass(inc.prioridad)}>{inc.prioridad}</span> : null} />
+            <InfoRow label="SLA" value={inc.sla} />
+            <InfoRow label="Límite SLA" value={inc.fecha_limite_sla ? `${inc.fecha_limite_sla} ${inc.hora_limite_sla || ''}` : null} />
+            <InfoRow label="Solicitante" value={inc.solicitante} />
+            <InfoRow label="Técnico" value={inc.nombre_tecnico} />
+            <InfoRow label="Fecha aviso" value={inc.fecha_hora} />
           </div>
-          <InfoRow label="Limite SLA" value={inc.fecha_limite_sla ? `${inc.fecha_limite_sla} ${inc.hora_limite_sla || ''}` : null} />
-          <InfoRow label="Solicitante" value={inc.solicitante} />
-          <InfoRow label="Tecnico" value={inc.nombre_tecnico} />
-          <InfoRow label="Fecha" value={inc.fecha_hora} />
           {inc.descripcion_fallo && (
-            <div className="card" style={{ borderColor: 'var(--border2)' }}>
-              <p style={{ fontSize: 12, color: 'var(--txt3)', fontFamily: 'var(--font-cond)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6}}>Descripcion del fallo</p>
+            <div className="card detail-info-full" style={{ marginTop: 12, borderColor: 'var(--border2)' }}>
+              <p className="card-block-label">Descripción del fallo</p>
               <p style={{ fontSize: 13, lineHeight: 1.6 }}>{inc.descripcion_fallo}</p>
             </div>
           )}
           {inc.comentarios_generales && (
-            <div className="card" style={{ borderColor: 'var(--border2)' }}>
-              <p style={{ fontSize: 11, color: 'var(--txt3)', fontFamily: 'var(--font-cond)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>Comentarios</p>
+            <div className="card detail-info-full" style={{ marginTop: 10, borderColor: 'var(--border2)' }}>
+              <p className="card-block-label">Comentarios</p>
               <p style={{ fontSize: 13, lineHeight: 1.6 }}>{inc.comentarios_generales}</p>
             </div>
           )}
-          {inc.duplicada ? <div className="alert alert-error">Posible duplicada de #{inc.duplicada_de}</div> : null}
-        </div>
+          {inc.duplicada ? (
+            <div className="alert alert-error" style={{ marginTop: 10 }}>Posible duplicada de #{inc.duplicada_de}</div>
+          ) : null}
+        </>
       )}
 
       {/* Tab EVENTOS */}
@@ -285,30 +362,35 @@ export default function IncidenciaDetailPage() {
         </div>
       )}
 
-      {/* Tab VISITAS */}
       {tab === 'escalados' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {escalados.length === 0 ? (
-            <p style={{ color: 'var(--txt3)', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Sin visitas registradas</p>
+            <p style={{ color: 'var(--txt3)', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>
+              Sin escalados registrados
+            </p>
           ) : escalados.map((e, idx) => (
-            <div key={e.id} className="card">
+            <div key={e.id} className="card detail-escalado-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--txt3)' }}>VISITA {idx + 1}</span>
-                {e.descripcion_trabajos?.startsWith('[VISITA PARCIAL]') && (
-                  <span className="badge" style={{ background: 'rgba(245,130,14,.15)', color: 'var(--p-media)', border: '1px solid rgba(245,130,14,.3)' }}>PARCIAL</span>
+                <span className="detail-escalado-num">Escalado {idx + 1}</span>
+                {isEscaladoParcial(e.descripcion_trabajos) && (
+                  <span className="badge" style={{ background: 'rgba(139,92,246,.15)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,.35)' }}>
+                    PARCIAL
+                  </span>
                 )}
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, marginLeft: 'auto' }}>👤 {e.nombre_tecnico}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, marginLeft: 'auto', color: 'var(--txt2)' }}>
+                  {e.nombre_tecnico}
+                </span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <InfoRow label="Inicio" value={e.fecha_inicio ? `${e.fecha_inicio} ${e.hora_inicio || ''}` : null} />
                 <InfoRow label="Fin" value={e.fecha_fin ? `${e.fecha_fin} ${e.hora_fin || ''}` : null} />
                 <InfoRow label="Desplazamiento" value={e.tiempo_desplazamiento ? `${e.tiempo_desplazamiento} min` : null} />
-                <InfoRow label="Actuacion" value={e.tiempo_actuacion ? `${e.tiempo_actuacion} min` : null} />
-                <InfoRow label="Tecnicos" value={e.num_tecnicos} />
+                <InfoRow label="Actuación" value={e.tiempo_actuacion ? `${e.tiempo_actuacion} min` : null} />
+                <InfoRow label="Técnicos" value={e.num_tecnicos} />
               </div>
               {e.descripcion_trabajos && (
                 <div style={{ marginTop: 10, fontSize: 13, color: 'var(--txt2)', lineHeight: 1.5 }}>
-                  {e.descripcion_trabajos.replace('[VISITA PARCIAL] ', '')}
+                  {limpiarDescEscalado(e.descripcion_trabajos)}
                 </div>
               )}
               {e.pieza_cambiada ? (
@@ -328,8 +410,11 @@ export default function IncidenciaDetailPage() {
       )}
 
       {showCierre && (
-        <ModalCierre incId={id} onClose={() => setShowCierre(false)}
-          onDone={() => { setShowCierre(false); load() }} />
+        isMetro
+          ? <ModalCierreMetro incId={id} onClose={() => setShowCierre(false)}
+              onDone={() => { setShowCierre(false); load() }} />
+          : <ModalCierreGenerico incId={id} onClose={() => setShowCierre(false)}
+              onDone={() => { setShowCierre(false); load() }} />
       )}
       {showEditar && inc && (
         <ModalEditarIncidencia inc={inc} onClose={() => setShowEditar(false)}
@@ -338,6 +423,18 @@ export default function IncidenciaDetailPage() {
       {showReasignar && (
         <ModalReasignar inc={inc} onClose={() => setShowReasignar(false)}
           onDone={() => { setShowReasignar(false); load() }} />
+      )}
+      {showCambiarEstado && inc && (
+        <ModalCambiarEstado
+          inc={inc}
+          estados={isMetro ? ESTADOS : ESTADOS_FILTRO_GENERICO}
+          onClose={() => setShowCambiarEstado(false)}
+          onDone={() => { setShowCambiarEstado(false); load() }}
+        />
+      )}
+      {showEscalado && (
+        <ModalVisitaGenerico incId={id} isMetro={isMetro} onClose={() => setShowEscalado(false)}
+          onDone={() => { setShowEscalado(false); load() }} />
       )}
       {showPendiente && (
         <ModalPendiente incId={id} onClose={() => setShowPendiente(false)}

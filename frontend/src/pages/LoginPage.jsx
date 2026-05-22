@@ -16,7 +16,7 @@ export default function LoginPage() {
     setErr(''); setLoading(true)
     try {
       await login(email, pass)
-      nav('/', { replace: true })
+      nav('/select-project', { replace: true })
     } catch (e) {
       setErr(e.message || 'Email o contraseña incorrectos')
       setShake(true)
@@ -51,10 +51,10 @@ export default function LoginPage() {
           </svg>
           </div>
           <h1 style={{
-            fontFamily: 'var(--font-cond)', fontSize: 26, fontWeight: 800,
+            fontFamily: 'var(--font)', fontSize: 26, fontWeight: 700,
             letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--txt)',
           }}>NOVATION</h1>
-          <p style={{ fontSize: 12, color: 'var(--txt3)', marginTop: 4, fontFamily: 'var(--font-cond)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+          <p style={{ fontSize: 12, color: 'var(--txt3)', marginTop: 4, fontFamily: 'var(--font)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
             Sistema de incidencias
           </p>
         </div>

@@ -28,8 +28,10 @@ ESTADOS_VALIDOS = [
 
 
 def registrar_evento(incidencia_id, tipo_evento, usuario_id=None,
-                     usuario_nombre="Sistema", payload=None) -> int:
-    conn = get_connection()
+                     usuario_nombre="Sistema", payload=None, conn=None) -> int:
+    _own = conn is None
+    if _own:
+        conn = get_connection()
     cur = conn.execute(
         """INSERT INTO incidencia_eventos
            (incidencia_id, usuario_id, usuario_nombre, tipo_evento, payload)
@@ -39,32 +41,39 @@ def registrar_evento(incidencia_id, tipo_evento, usuario_id=None,
     )
     conn.commit()
     eid = cur.lastrowid
-    conn.close()
+    if _own:
+        conn.close()
     return eid
 
 
-def get_eventos(incidencia_id) -> list[dict]:
-    conn = get_connection()
+def get_eventos(incidencia_id, conn=None) -> list[dict]:
+    _own = conn is None
+    if _own:
+        conn = get_connection()
     rows = conn.execute(
         "SELECT * FROM incidencia_eventos WHERE incidencia_id=? ORDER BY id ASC",
         (incidencia_id,),
     ).fetchall()
-    conn.close()
+    if _own:
+        conn.close()
     return [dict(r) for r in rows]
 
 
-def get_ultimo_evento(incidencia_id, tipo) -> dict | None:
-    conn = get_connection()
+def get_ultimo_evento(incidencia_id, tipo, conn=None) -> dict | None:
+    _own = conn is None
+    if _own:
+        conn = get_connection()
     row = conn.execute(
         "SELECT * FROM incidencia_eventos WHERE incidencia_id=? AND tipo_evento=? ORDER BY id DESC LIMIT 1",
         (incidencia_id, tipo),
     ).fetchone()
-    conn.close()
+    if _own:
+        conn.close()
     return dict(row) if row else None
 
 
-def calcular_tiempos(incidencia_id) -> dict:
-    eventos = get_eventos(incidencia_id)
+def calcular_tiempos(incidencia_id, conn=None) -> dict:
+    eventos = get_eventos(incidencia_id, conn=conn)
     result = {
         "timestamp_asignada": None,
         "timestamp_inicio":   None,
@@ -91,8 +100,10 @@ def calcular_tiempos(incidencia_id) -> dict:
     return result
 
 
-def aplicar_cambio_estado(incidencia_id, nuevo_estado, usuario, payload=None):
-    conn = get_connection()
+def aplicar_cambio_estado(incidencia_id, nuevo_estado, usuario, payload=None, conn=None):
+    _own = conn is None
+    if _own:
+        conn = get_connection()
     if nuevo_estado == "ASIGNADA":
         conn.execute(
             "UPDATE incidencias SET nombre_tecnico=?, estado_actual=? WHERE id=?",
@@ -104,7 +115,6 @@ def aplicar_cambio_estado(incidencia_id, nuevo_estado, usuario, payload=None):
             (nuevo_estado, incidencia_id),
         )
     conn.commit()
-    conn.close()
 
     tipo_evento = _ESTADO_A_EVENTO.get(nuevo_estado)
     if tipo_evento:
@@ -114,14 +124,19 @@ def aplicar_cambio_estado(incidencia_id, nuevo_estado, usuario, payload=None):
             usuario_id=usuario.get("id"),
             usuario_nombre=usuario.get("nombre", "Sistema"),
             payload=payload or {},
+            conn=conn,
         )
 
-    _log_historial(incidencia_id, usuario.get("nombre", "Sistema"), nuevo_estado)
+    _log_historial(incidencia_id, usuario.get("nombre", "Sistema"), nuevo_estado, conn=conn)
+    if _own:
+        conn.close()
     return tipo_evento
 
 
-def _log_historial(incidencia_id, usuario, nuevo_estado):
-    conn = get_connection()
+def _log_historial(incidencia_id, usuario, nuevo_estado, conn=None):
+    _own = conn is None
+    if _own:
+        conn = get_connection()
     antes = conn.execute(
         "SELECT estado_actual FROM incidencias WHERE id=?", (incidencia_id,)
     ).fetchone()
@@ -133,4 +148,5 @@ def _log_historial(incidencia_id, usuario, nuevo_estado):
         (incidencia_id, usuario, estado_antes, nuevo_estado),
     )
     conn.commit()
-    conn.close()
+    if _own:
+        conn.close()

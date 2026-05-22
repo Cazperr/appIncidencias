@@ -7,45 +7,36 @@ from fastapi import Depends, HTTPException, status, Header
 from jose import JWTError, jwt
 
 from app.core.config import get_settings
-from app.db.database import get_connection
+from app.db.database import get_master_connection
 
 settings = get_settings()
 
 
-# -------------------------
-# PASSWORDS
-# -------------------------
+# ── Passwords ──────────────────────────────────────────────────────────────────
+
 def _prep(password: str) -> bytes:
     return hashlib.sha256(password.encode()).hexdigest().encode()
 
-
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(_prep(password), bcrypt.gensalt()).decode()
-
 
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(_prep(plain), hashed.encode())
 
 
-# -------------------------
-# JWT
-# -------------------------
+# ── JWT ────────────────────────────────────────────────────────────────────────
+
 def _create_token(data: dict, expires_delta: timedelta) -> str:
     payload = data.copy()
     payload["exp"] = datetime.now(timezone.utc) + expires_delta
-
-    return jwt.encode(
-        payload,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
-    )
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def create_access_token(user_id: int, rol: str) -> str:
-    return _create_token(
-        {"sub": str(user_id), "rol": rol, "type": "access"},
-        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-    )
+def create_access_token(user_id: int, rol: str, proyecto_id: str = None) -> str:
+    data = {"sub": str(user_id), "rol": rol, "type": "access"}
+    if proyecto_id:
+        data["proyecto_id"] = proyecto_id
+    return _create_token(data, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
 
 
 def create_refresh_token(user_id: int) -> str:
@@ -57,11 +48,7 @@ def create_refresh_token(user_id: int) -> str:
 
 def decode_token(token: str) -> dict:
     try:
-        return jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
-        )
+        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -70,9 +57,8 @@ def decode_token(token: str) -> dict:
         )
 
 
-# -------------------------
-# USER RESOLUTION (FIX REAL)
-# -------------------------
+# ── User resolution ────────────────────────────────────────────────────────────
+
 def _get_user_from_token(token: str) -> dict:
     payload = decode_token(token)
 
@@ -81,7 +67,7 @@ def _get_user_from_token(token: str) -> dict:
 
     user_id = int(payload["sub"])
 
-    conn = get_connection()
+    conn = get_master_connection()
     user = conn.execute(
         "SELECT id, nombre, email, rol, activo FROM usuarios WHERE id=?",
         (user_id,)
@@ -91,24 +77,31 @@ def _get_user_from_token(token: str) -> dict:
     if not user or not user["activo"]:
         raise HTTPException(status_code=401, detail="Usuario no encontrado o desactivado")
 
-    return dict(user)
+    result = dict(user)
+    # Incluir proyecto_id del token si existe
+    if "proyecto_id" in payload:
+        result["proyecto_id"] = payload["proyecto_id"]
+        # Usar el rol del proyecto en vez del rol global
+        conn2 = get_master_connection()
+        asig = conn2.execute(
+            "SELECT rol FROM usuario_proyecto WHERE usuario_id=? AND proyecto_id=?",
+            (user_id, payload["proyecto_id"])
+        ).fetchone()
+        conn2.close()
+        if asig:
+            result["rol"] = asig["rol"]
+
+    return result
 
 
-# -------------------------
-# AUTH (SIN OAUTH2 - ESTABLE)
-# -------------------------
-async def get_current_user(
-    authorization: str = Header(None)
-) -> dict:
+# ── Dependencias FastAPI ───────────────────────────────────────────────────────
 
+async def get_current_user(authorization: str = Header(None)) -> dict:
     if not authorization:
         raise HTTPException(status_code=401, detail="No autenticado")
-
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Formato de token inválido")
-
     token = authorization.split(" ")[1]
-
     return _get_user_from_token(token)
 
 
@@ -118,9 +111,6 @@ async def get_current_active_user(
     return user
 
 
-# -------------------------
-# ROLES
-# -------------------------
 def require_rol(*roles: str):
     async def checker(user: Annotated[dict, Depends(get_current_active_user)]):
         if user["rol"] not in roles:
@@ -129,7 +119,6 @@ def require_rol(*roles: str):
                 detail=f"Se requiere rol: {', '.join(roles)}",
             )
         return user
-
     return checker
 
 

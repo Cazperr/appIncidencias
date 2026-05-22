@@ -16,16 +16,39 @@ export const LINEA_COLORS = {
 }
 export const LINEA_TEXT_DARK = new Set(['L3','L12'])
 
+export const ESTADOS_GENERICOS = ['PENDIENTE NOVATION', 'PENDIENTE REVISAR', 'SOLUCIONADA']
+
+export const ESTADO_COLOR = {
+  // Metro
+  'PENDIENTE NOVA':       '#3b82f6',
+  'PENDIENTE MMAD':       '#f59e0b',
+  'REVISAR':              '#ef4444',
+  'ASIGNADA':             '#8b5cf6',
+  'EN CURSO':             '#06b6d4',
+  'PENDIENTE RESOLUCION': '#f59e0b',
+  'SOLUCIONADA':          '#22c55e',
+  'FINALIZADA':           '#52606e',
+  // Genéricos
+  'PENDIENTE NOVATION':   '#3b82f6',
+  'PENDIENTE REVISAR':    '#f59e0b',
+}
+
+export function estadoAccentColor(estado) {
+  return ESTADO_COLOR[estado] || 'var(--border2)'
+}
+
 export function estadoBadgeClass(estado) {
   const map = {
-    'PENDIENTE NOVA':      'badge-nova',
-    'PENDIENTE MMAD':      'badge-mmad',
-    'REVISAR':             'badge-revisar',
-    'ASIGNADA':            'badge-asig',
-    'EN CURSO':            'badge-curso',
-    'PENDIENTE RESOLUCION':'badge-mmad',
-    'SOLUCIONADA':         'badge-sol',
-    'FINALIZADA':          'badge-fin',
+    'PENDIENTE NOVA':       'badge-nova',
+    'PENDIENTE MMAD':       'badge-mmad',
+    'REVISAR':              'badge-revisar',
+    'ASIGNADA':             'badge-asig',
+    'EN CURSO':             'badge-curso',
+    'PENDIENTE RESOLUCION': 'badge-mmad',
+    'SOLUCIONADA':          'badge-sol',
+    'FINALIZADA':           'badge-fin',
+    'PENDIENTE NOVATION':   'badge-nova',
+    'PENDIENTE REVISAR':    'badge-mmad',
   }
   return 'badge ' + (map[estado] || 'badge-fin')
 }

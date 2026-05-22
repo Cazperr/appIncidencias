@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, field_validator
 from typing import Optional, Any
 import json
 
@@ -22,7 +22,7 @@ class RefreshResponse(BaseModel):
 class UsuarioCreate(BaseModel):
     nombre: str
     username: Optional[str] = None
-    email: EmailStr
+    email: str
     rol: str = "TECNICO"
     password: str
 
@@ -36,7 +36,7 @@ class UsuarioCreate(BaseModel):
 class UsuarioUpdate(BaseModel):
     nombre: Optional[str] = None
     username: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     rol: Optional[str] = None
     activo: Optional[bool] = None
     password: Optional[str] = None
@@ -152,6 +152,13 @@ class EventoOut(BaseModel):
 
 # ── Cierre de incidencia ──────────────────────────────────────────────────────
 
+class EquipoSustituido(BaseModel):
+    descripcion: Optional[str] = None
+    sn_nuevo: Optional[str] = None
+    pn_nuevo: Optional[str] = None
+    sn_viejo: Optional[str] = None
+    pn_viejo: Optional[str] = None
+
 class CierreIncidencia(BaseModel):
     """Payload requerido para marcar una incidencia como SOLUCIONADA."""
     tiempo_desplazamiento: str           # minutos como string, ej. "25"
@@ -166,3 +173,27 @@ class CierreIncidencia(BaseModel):
     # pero el técnico puede ajustarlos manualmente
     hora_inicio_override: Optional[str] = None
     hora_fin_override: Optional[str] = None
+    fecha_inicio_override: Optional[str] = None   # DD/MM/YYYY
+    fecha_fin_override: Optional[str] = None      # DD/MM/YYYY
+    material_descripcion: Optional[str] = None
+    equipos: Optional[list] = None
+    estado_resultante: Optional[str] = 'SOLUCIONADA'
+
+    descripcion: Optional[str] = None
+    sn_nuevo: Optional[str] = None
+    pn_nuevo: Optional[str] = None
+    sn_viejo: Optional[str] = None
+    pn_viejo: Optional[str] = None
+
+class VisitaParcialBody(BaseModel):
+    """Payload para registrar una visita parcial."""
+    fecha_inicio: Optional[str] = None
+    hora_inicio: Optional[str] = None
+    fecha_fin: Optional[str] = None
+    hora_fin: Optional[str] = None
+    tiempo_desplazamiento: Optional[str] = None
+    num_tecnicos: int = 1
+    descripcion_trabajos: str
+    material_descripcion: Optional[str] = None
+    equipos: Optional[list[EquipoSustituido]] = None
+    estado_resultante: Optional[str] = None  # Si se indica, actualiza el estado
