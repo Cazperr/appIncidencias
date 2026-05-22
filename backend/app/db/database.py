@@ -80,7 +80,7 @@ def _make_connection(url: str, auth_token: str = "") -> object:
 
 def get_master_connection():
     """Conexión a la BD master (usuarios + proyectos)."""
-    conn = _make_connection(settings.DATABASE_URL, settings.TURSO_AUTH_TOKEN)
+    conn = _make_connection(settings.master_db_url, settings.master_db_token)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 

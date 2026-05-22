@@ -27,7 +27,7 @@ app = FastAPI(
 # ─────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://app-incidencias(-git-.*)?\.vercel\.app",
+    allow_origin_regex=r"https://app-incidencias[a-zA-Z0-9\-]*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,8 +49,13 @@ app.include_router(proyectos.router)
 # ─────────────────────────────────────────────
 @app.on_event("startup")
 async def startup():
-    print("🚀 API started successfully (no DB blocking)")
-    # init_db eliminado del startup
+    print("🚀 Starting API...")
+    try:
+        init_db()
+        seed_admin_if_needed()
+        print("✅ DB ready")
+    except Exception as e:
+        print(f"⚠️ DB init warning: {e}")
 
 
 # ─────────────────────────────────────────────
