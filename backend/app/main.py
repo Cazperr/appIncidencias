@@ -17,9 +17,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://app-incidencias-xi.vercel.app",
         "http://localhost:5173",
-        "http://localhost:3000",
+        "https://app-incidencias-git-feature-proyectos-92d583-cazperrs-projects.vercel.app",
+        "https://app-incidencias.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
