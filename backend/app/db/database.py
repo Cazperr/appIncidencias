@@ -66,10 +66,12 @@ class TursoConnection:
 def _make_connection(url: str, auth_token: str = "") -> object:
     if url.startswith("libsql://") or url.startswith("https://"):
         import libsql_client
-        client = libsql_client.create_client_sync(url=url, auth_token=auth_token)
+        # Convertir libsql:// a https:// para evitar problemas de WebSocket en Railway
+        http_url = url.replace("libsql://", "https://")
+        client = libsql_client.create_client_sync(url=http_url, auth_token=auth_token)
         return TursoConnection(client)
     else:
-        path = url.replace("sqlite:///", "")
+        path = url.replace("sqlite:///./", "./").replace("sqlite:///", "")
         conn = sqlite3.connect(path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
@@ -81,7 +83,9 @@ def _make_connection(url: str, auth_token: str = "") -> object:
 def get_master_connection():
     """Conexión a la BD master (usuarios + proyectos)."""
     conn = _make_connection(settings.master_db_url, settings.master_db_token)
-    conn.execute("PRAGMA foreign_keys = ON")
+    # Solo aplicar PRAGMA en SQLite local
+    if not settings.master_db_url.startswith(("libsql://", "https://")):
+        conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
