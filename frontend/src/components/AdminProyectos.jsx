@@ -39,3 +39,4 @@ export const adminApi = {
     method: 'DELETE' 
   }),
 }
+export default function AdminProyectos() { return null }
