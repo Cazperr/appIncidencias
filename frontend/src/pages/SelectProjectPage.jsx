@@ -6,7 +6,7 @@ import { api, setToken } from '../lib/api'
 import DashboardComparativa from '../components/DashboardComparativa'
 
 export default function SelectProjectPage() {
-  const { user, logout, setProject } = useAuth()
+  const { user, logout, setProject, isAdmin } = useAuth()
   const { dark, toggle } = useTheme()
   const nav = useNavigate()
   const [projects, setProjects]       = useState([])
@@ -44,6 +44,10 @@ export default function SelectProjectPage() {
     if (found) setActive(found)
   }
 
+  function goToAdminPanel() {
+    nav('/admin-proyectos')  // ← Ruta correcta según tu App.jsx
+  }
+
   const s = active?.stats || { total: '—', pendientes: '—', resueltas: '—', criticas: '—' }
   const pct = s.total && s.resueltas && s.total !== '—'
     ? Math.round((s.resueltas / s.total) * 100) : 0
@@ -54,7 +58,7 @@ export default function SelectProjectPage() {
         <span className="select-project-brand">NOVATION</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 12, color: 'var(--txt3)', fontFamily: 'var(--font-mono)' }}>
-            {user?.nombre}
+            {user?.nombre} {user?.rol && `(${user.rol})`}
           </span>
           <button type="button" onClick={toggle} style={{
             background: 'none', border: 'none', padding: 6,
@@ -74,7 +78,21 @@ export default function SelectProjectPage() {
               </svg>
             )}
           </button>
-          <button type="button" onClick={logout} className="btn btn-ghost btn-sm">Salir</button>
+          
+          {/* Solo mostrar Panel Admin si el usuario es ADMIN */}
+          {isAdmin && (
+            <button 
+              type="button" 
+              onClick={goToAdminPanel} 
+              className="btn btn-ghost btn-sm"
+            >
+              Panel Admin
+            </button>
+          )}
+          
+          <button type="button" onClick={logout} className="btn btn-ghost btn-sm">
+            Salir
+          </button>
         </div>
       </header>
 

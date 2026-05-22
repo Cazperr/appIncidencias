@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import BottomNav from './components/BottomNav'
+import AdminProyectos from './components/AdminProyectos';
 
 import LoginPage            from './pages/LoginPage'
 import SelectProjectPage    from './pages/SelectProjectPage'
@@ -15,7 +16,8 @@ import DashboardPage        from './pages/DashboardPage'
 import UsuariosPage         from './pages/UsuariosPage'
 import PerfilPage           from './pages/PerfilPage'
 
-function RequireAuth({ children }) {
+// RequireAuth modificado: puede requerir proyecto o no
+function RequireAuth({ children, requireProject = true }) {
   const { user, proyecto, loading } = useAuth()
   if (loading) return (
     <div className="loading-screen">
@@ -23,15 +25,18 @@ function RequireAuth({ children }) {
     </div>
   )
   if (!user) return <Navigate to="/login" replace />
-  if (!proyecto) return <Navigate to="/select-project" replace />
+  // Solo redirigir a select-project si requiere proyecto y no hay proyecto
+  if (requireProject && !proyecto) return <Navigate to="/select-project" replace />
   return children
 }
 
 // Botón día/noche — oculto en /perfil (tiene el suyo) y en móvil (<768px)
+// Modifica el ThemeButton para que se oculte en admin
 function ThemeButton() {
   const { dark, toggle } = useTheme()
   const { pathname } = useLocation()
-  if (pathname === '/perfil') return null
+  // Ocultar en perfil y en admin-proyectos
+  if (pathname === '/perfil' || pathname === '/admin-proyectos') return null
   return (
     <button
       onClick={toggle}
@@ -198,6 +203,20 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/select-project" element={<SelectProjectPage />} />
+            
+            {/* Panel Admin - NO requiere proyecto seleccionado */}
+            <Route 
+              path="/admin-proyectos" 
+              element={
+                <RequireAuth requireProject={false}>
+                  <Layout>
+                    <AdminProyectos />
+                  </Layout>
+                </RequireAuth>
+              } 
+            />
+            
+            {/* Estas rutas SÍ requieren proyecto seleccionado */}
             <Route path="/" element={<RequireAuth><Layout><IncidenciasPage /></Layout></RequireAuth>}/>
             <Route path="/incidencia/:id" element={<RequireAuth><Layout><IncidenciaDetailPage /></Layout></RequireAuth>}/>
             <Route path="/nueva" element={<RequireAuth><Layout><NuevaIncidenciaPage /></Layout></RequireAuth>}/>
