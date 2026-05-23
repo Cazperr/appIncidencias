@@ -266,3 +266,24 @@ def _migrate_master(conn):
     existing_proy = {row[1] for row in conn.execute("PRAGMA table_info(proyectos)")}
     if "tipo" not in existing_proy:
         conn.execute("ALTER TABLE proyectos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'generico'")
+
+# ── Migraciones ────────────────────────────────────────────────────────────────
+
+def run_migrations_master_db():
+    """Aplica migraciones pendientes a la BD master."""
+    from app.db.migrations import run_migrations_master
+    conn = get_master_connection()
+    try:
+        run_migrations_master(conn)
+    finally:
+        conn.close()
+
+
+def run_migrations_project_db(proyecto_id: str):
+    """Aplica migraciones pendientes a la BD de un proyecto."""
+    from app.db.migrations import run_migrations_project
+    conn = get_project_connection(proyecto_id)
+    try:
+        run_migrations_project(conn, proyecto_id)
+    finally:
+        conn.close()
