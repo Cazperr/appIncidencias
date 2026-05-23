@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 
 const TIPOS = ['metro', 'generico']
@@ -6,12 +7,32 @@ const ROLES = ['ADMIN', 'TECNICO', 'VIEWER']
 
 export default function AdminProyectos() {
   const [tab, setTab] = useState('proyectos')
+  const nav = useNavigate()
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div className="page-title">Panel de administración</div>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 20px', borderBottom: '1px solid var(--border)',
+        background: 'var(--bg2)',
+      }}>
+        <button onClick={() => nav(-1)} style={{
+          background: 'none', border: 'none', color: 'var(--txt2)',
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontFamily: 'var(--font-mono)', fontSize: 12, cursor: 'pointer',
+          padding: '4px 8px', borderRadius: 'var(--radius)',
+        }}
+          onMouseEnter={e => e.currentTarget.style.color = 'var(--txt)'}
+          onMouseLeave={e => e.currentTarget.style.color = 'var(--txt2)'}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M19 12H5M12 5l-7 7 7 7"/>
+          </svg>
+          Volver
+        </button>
+        <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--txt)' }}>Panel de administración</span>
       </div>
+      <div className="page">
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 2, marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
@@ -34,6 +55,7 @@ export default function AdminProyectos() {
       </div>
 
       {tab === 'proyectos' ? <TabProyectos /> : <TabUsuarios />}
+      </div>
     </div>
   )
 }

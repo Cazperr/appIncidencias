@@ -204,14 +204,12 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/select-project" element={<SelectProjectPage />} />
             
-            {/* Panel Admin - NO requiere proyecto seleccionado */}
+            {/* Panel Admin - sin Layout ni BottomNav */}
             <Route 
               path="/admin-proyectos" 
               element={
                 <RequireAuth requireProject={false}>
-                  <Layout>
-                    <AdminProyectos />
-                  </Layout>
+                  <AdminProyectos />
                 </RequireAuth>
               } 
             />
