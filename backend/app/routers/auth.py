@@ -153,6 +153,7 @@ async def mis_proyectos(
                 SELECT id, nombre, descripcion, initials, tipo
                 FROM proyectos
                 WHERE activo=1
+                ORDER BY nombre
                 """
             ).fetchall()
 
@@ -174,6 +175,7 @@ async def mis_proyectos(
                 FROM proyectos p
                 JOIN usuario_proyecto up ON up.proyecto_id = p.id
                 WHERE up.usuario_id = ? AND p.activo = 1
+                ORDER BY p.nombre
                 """,
                 (user["id"],),
             ).fetchall()
@@ -182,6 +184,26 @@ async def mis_proyectos(
 
     finally:
         conn.close()
+
+    # Añadir stats de cada proyecto
+    from app.db.database import get_project_connection
+    for p in proyectos:
+        try:
+            pconn = get_project_connection(p["id"])
+            total      = pconn.execute("SELECT COUNT(*) FROM incidencias").fetchone()[0]
+            pendientes = pconn.execute(
+                "SELECT COUNT(*) FROM incidencias WHERE estado_actual NOT IN ('SOLUCIONADA','FINALIZADA')"
+            ).fetchone()[0]
+            resueltas  = pconn.execute(
+                "SELECT COUNT(*) FROM incidencias WHERE estado_actual IN ('SOLUCIONADA','FINALIZADA')"
+            ).fetchone()[0]
+            criticas   = pconn.execute(
+                "SELECT COUNT(*) FROM incidencias WHERE prioridad='Alta' AND estado_actual NOT IN ('SOLUCIONADA','FINALIZADA')"
+            ).fetchone()[0]
+            pconn.close()
+            p["stats"] = {"total": total, "pendientes": pendientes, "resueltas": resueltas, "criticas": criticas}
+        except Exception:
+            p["stats"] = {"total": 0, "pendientes": 0, "resueltas": 0, "criticas": 0}
 
     return proyectos
 

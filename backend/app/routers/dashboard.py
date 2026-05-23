@@ -200,12 +200,19 @@ def _stats_proyecto(proyecto_id: str):
             por_mes.append({"mes": row["mes"], "n": row["n"]})
         por_mes.reverse()
 
+        por_prioridad = {}
+        for row in conn.execute(
+            "SELECT prioridad, COUNT(*) n FROM incidencias GROUP BY prioridad"
+        ):
+            por_prioridad[row["prioridad"] or "Sin definir"] = row["n"]
+
         return {
             "total": total,
             "abiertas": abiertas,
             "cerradas": cerradas,
             "por_estado": por_estado,
             "por_mes": por_mes,
+            "por_prioridad": por_prioridad,
         }
     finally:
         conn.close()
@@ -226,7 +233,7 @@ async def comparativa(current: dict = Depends(get_current_active_user)):
         except Exception:
             stats = {
                 "total": 0, "abiertas": 0, "cerradas": 0,
-                "por_estado": {}, "por_mes": [],
+                "por_estado": {}, "por_mes": [], "por_prioridad": {},
             }
         mes_map = {}
         for m in stats["por_mes"]:
