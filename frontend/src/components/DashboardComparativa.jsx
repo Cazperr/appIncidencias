@@ -192,6 +192,38 @@ export default function DashboardComparativa({ embedded = false, activeProjectId
           </div>
         ))}
       </div>
+
+      <div className="section-label">Prioridades por proyecto</div>
+      <div className="dash-proyectos-grid">
+        {proyectos.map((p, i) => {
+          const prios = p.por_prioridad || {}
+          const totalPrios = Object.values(prios).reduce((a, b) => a + b, 0) || 1
+          const PRIO_COLOR = { Alta: '#ef4444', Media: '#f59e0b', Baja: '#22c55e' }
+          return (
+            <div key={p.id} className="card dash-proyecto-card">
+              <div className="dash-proyecto-card-head">
+                <span className="dash-proyecto-badge" style={{ background: PROY_COLORS[i % PROY_COLORS.length] }}>
+                  {p.initials}
+                </span>
+                <span className="dash-proyecto-nombre">{p.nombre}</span>
+              </div>
+              {Object.keys(prios).length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--txt3)' }}>Sin datos</p>
+              ) : (
+                Object.entries(prios).map(([prio, n]) => (
+                  <div key={prio} className="dash-estado-row">
+                    <span className="dash-estado-label" style={{ color: PRIO_COLOR[prio] || 'var(--txt2)' }}>{prio}</span>
+                    <div className="dash-bar-track dash-bar-track--sm">
+                      <div className="dash-bar-fill" style={{ width: `${Math.round((n / totalPrios) * 100)}%`, background: PRIO_COLOR[prio] || 'var(--accent)' }} />
+                    </div>
+                    <span className="dash-bar-num">{n}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

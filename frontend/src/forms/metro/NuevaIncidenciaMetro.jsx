@@ -4,14 +4,17 @@ import { api } from '../../lib/api'
 import { PRIORIDADES, TIPOS, TIPO_AVISO, LINEAS, LINEA_COLORS, LINEA_TEXT_DARK, ESTACION_LINEAS } from '../../lib/constants'
 import { calcularSLA } from './utils/calcularSLA'
 import BuscadorEstacion from './components/BuscadorEstacion'
+import { useAuth } from '../../context/AuthContext'
 
 const ESTADOS_METRO = ['PENDIENTE NOVA', 'PENDIENTE MMAD', 'REVISAR']
 
 const HOY   = new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'2-digit', year:'numeric' })
 const AHORA = new Date().toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })
 
+
 export default function NuevaIncidenciaMetro() {
   const nav = useNavigate()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState('')
   const [pdfLoading, setPdfLoading] = useState(false)
@@ -26,14 +29,14 @@ export default function NuevaIncidenciaMetro() {
     zona:                 '',
     linea:                '',
     estacion:             '',
-    nombre_tecnico:       '',
+    nombre_tecnico:       user?.nombre || '',
     fecha_hora:           `${HOY} ${AHORA}`,
     tipo:                 'Correctivo',
     prioridad:            'Media',
     sla:                  '12h',
     fecha_limite_sla:     '',
     hora_limite_sla:      '',
-    solicitante:          '',
+    solicitante:          'GEMA',
     descripcion_fallo:    '',
     comentarios_generales:'',
   })

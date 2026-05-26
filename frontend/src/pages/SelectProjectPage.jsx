@@ -57,7 +57,7 @@ export default function SelectProjectPage() {
       <header className="select-project-topbar">
         <span className="select-project-brand">NOVATION</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--txt3)', fontFamily: 'var(--font-mono)' }}>
+          <span className="select-project-topbar-user" style={{ fontSize: 12, color: 'var(--txt3)', fontFamily: 'var(--font-mono)' }}>
             {user?.nombre} {user?.rol && `(${user.rol})`}
           </span>
           <button type="button" onClick={toggle} style={{

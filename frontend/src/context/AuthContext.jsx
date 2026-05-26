@@ -50,7 +50,8 @@ export function AuthProvider({ children }) {
       // Cambiar proyecto: limpiar y redirigir
       localStorage.removeItem('metro_project')
       setProyectoState(null)
-      window.location.href = '/select-project'
+      const isElectron = window.navigator.userAgent.includes('Electron')
+      window.location.href = isElectron ? '#/select-project' : '/select-project'
     } else {
       localStorage.setItem('metro_project', JSON.stringify(project))
       setProyectoState(project)
@@ -63,7 +64,8 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('metro_user')
     setUser(null)
     setProyectoState(null)
-    window.location.href = '/login'
+    const isElectron = window.navigator.userAgent.includes('Electron')
+    window.location.href = isElectron ? '#/login' : '/login'
   }
 
   // Verificar si el usuario es admin

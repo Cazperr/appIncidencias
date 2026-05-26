@@ -1,7 +1,11 @@
 import React from 'react'
 import './index.css'
+import ErrorToast from './components/ErrorToast'
 
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+const Router = window.navigator.userAgent.includes('Electron') ? HashRouter : BrowserRouter
+
+
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import BottomNav from './components/BottomNav'
@@ -199,7 +203,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
+        <Router>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/select-project" element={<SelectProjectPage />} />
@@ -223,8 +227,9 @@ export default function App() {
             <Route path="/perfil" element={<RequireAuth><Layout><PerfilPage /></Layout></RequireAuth>}/>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </BrowserRouter>
+        </Router>
       </AuthProvider>
+      <ErrorToast />
     </ThemeProvider>
   )
 }

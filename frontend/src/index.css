@@ -719,10 +719,11 @@ a *, button * { cursor: pointer; }
 /* ── Selección de proyecto ───────────────────────────────────────────────── */
 
 .select-project-page {
-  min-height: 100dvh;
+  height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr;
   background: var(--bg);
+  overflow: hidden;
 }
 .select-project-topbar {
   display: flex;
@@ -745,6 +746,7 @@ a *, button * { cursor: pointer; }
   grid-template-columns: 300px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+  height: 100%;
 }
 .select-project-sidebar {
   border-right: 1px solid var(--border);
@@ -927,18 +929,32 @@ a *, button * { cursor: pointer; }
 }
 
 @media (max-width: 960px) {
+  .select-project-page {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
   .select-project-body {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    overflow-y: auto;
+    grid-template-rows: auto auto;
+    overflow: visible;
+    height: auto;
   }
   .select-project-sidebar {
     border-right: none;
     border-bottom: 1px solid var(--border);
     max-height: none;
+    overflow-y: visible;
   }
   .select-project-panel { margin-top: 0; }
   .select-project-main { overflow-y: visible; }
+  .select-project-topbar {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .select-project-topbar-user {
+    display: none;
+  }
 }
 
 /* ── Dashboard comparativo ───────────────────────────────────────────────── */
@@ -1319,3 +1335,4 @@ a *, button * { cursor: pointer; }
   .print-table { font-size: 10px; }
   .print-table th { background: #333 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
