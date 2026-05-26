@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { PRIORIDADES, TIPOS, TIPO_AVISO, LINEAS, LINEA_COLORS, LINEA_TEXT_DARK, ESTACION_LINEAS } from '../../lib/constants'
@@ -10,7 +10,6 @@ const ESTADOS_METRO = ['PENDIENTE NOVA', 'PENDIENTE MMAD', 'REVISAR']
 
 const HOY   = new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'2-digit', year:'numeric' })
 const AHORA = new Date().toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })
-
 
 export default function NuevaIncidenciaMetro() {
   const nav = useNavigate()
@@ -29,7 +28,7 @@ export default function NuevaIncidenciaMetro() {
     zona:                 '',
     linea:                '',
     estacion:             '',
-    nombre_tecnico:       user?.nombre || '',
+    nombre_tecnico:       '',
     fecha_hora:           `${HOY} ${AHORA}`,
     tipo:                 'Correctivo',
     prioridad:            'Media',
@@ -40,6 +39,12 @@ export default function NuevaIncidenciaMetro() {
     descripcion_fallo:    '',
     comentarios_generales:'',
   })
+
+  useEffect(() => {
+    if (user?.nombre) {
+      set('nombre_tecnico', user.nombre)
+    }
+  }, [user])
 
   function set(k, v) {
     setForm(f => {
